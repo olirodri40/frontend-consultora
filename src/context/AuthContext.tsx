@@ -1,35 +1,50 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-// Tipo del usuario logueado
 type UsuarioSesion = {
   id: number;
   nombre: string;
   usuario: string;
   rol: 'administrador' | 'profesional' | 'recepcionista' | 'supervisor';
-  profesionalId?: number;
+  area_id?: number | null;
 };
 
-// Tipo del contexto — que cosas expone
 type AuthContextType = {
-  usuario: UsuarioSesion | null;  // null = no hay sesion activa
-  login: (usuario: UsuarioSesion) => void;
+  usuario: UsuarioSesion | null;
+  login: (usuario: UsuarioSesion, token: string) => void;
   logout: () => void;
   estaLogueado: boolean;
 };
 
-// Crear el contexto
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Provider — el componente que envuelve toda la app
-// y hace disponible el contexto a todos los hijos
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<UsuarioSesion | null>(null);
 
-  function login(u: UsuarioSesion) {
+  // Al cargar la app, verificar si hay sesion guardada en localStorage
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const usuarioGuardado = localStorage.getItem('usuario');
+
+    if (token && usuarioGuardado) {
+      try {
+        setUsuario(JSON.parse(usuarioGuardado));
+      } catch {
+        localStorage.removeItem('token');
+        localStorage.removeItem('usuario');
+      }
+    }
+  }, []);
+
+  function login(u: UsuarioSesion, token: string) {
+    // Guardar en localStorage para que persista al recargar
+    localStorage.setItem('token', token);
+    localStorage.setItem('usuario', JSON.stringify(u));
     setUsuario(u);
   }
 
   function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('usuario');
     setUsuario(null);
   }
 
@@ -45,9 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Hook personalizado para usar el contexto facilmente
-// En vez de escribir useContext(AuthContext) en cada componente,
-// solo escribes useAuth()
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

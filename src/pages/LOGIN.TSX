@@ -1,47 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-
-// Usuarios de prueba — luego vendrán de la API real
-const USUARIOS_DEMO = [
-  {
-    id: 1,
-    nombre: 'Administrador',
-    usuario: 'admin',
-    password: 'admin123',
-    rol: 'administrador' as const,
-  },
-  {
-    id: 2,
-    nombre: 'Laura Perez',
-    usuario: 'laura.perez',
-    password: 'laura123',
-    rol: 'profesional' as const,
-    profesionalId: 1,
-  },
-  {
-    id: 3,
-    nombre: 'Carlos Ruiz',
-    usuario: 'carlos.ruiz',
-    password: 'carlos123',
-    rol: 'profesional' as const,
-    profesionalId: 2,
-  },
-];
+import { loginService } from '../services/auth.service';
 
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  // Estado del formulario
   const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
   const [verPassword, setVerPassword] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
-    // Evita que el formulario recargue la pagina
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
 
@@ -52,47 +24,36 @@ export default function Login() {
 
     setCargando(true);
 
-    // Simular delay de red (luego sera una llamada real a la API)
-    setTimeout(() => {
-      const encontrado = USUARIOS_DEMO.find(
-        u => u.usuario === usuario.toLowerCase() && u.password === password
-      );
+    try {
+      // Llamada real al backend
+      const respuesta = await loginService(usuario, password);
 
-      if (!encontrado) {
-        setError('Usuario o contrasena incorrectos');
-        setCargando(false);
-        return;
-      }
-
-      // Guardar en el contexto
-      login({
-        id: encontrado.id,
-        nombre: encontrado.nombre,
-        usuario: encontrado.usuario,
-        rol: encontrado.rol,
-        profesionalId: encontrado.profesionalId,
-      });
+      // Guardar sesion en el contexto y localStorage
+      login(respuesta.usuario, respuesta.token);
 
       // Redirigir al dashboard
       navigate('/');
-    }, 800);
+
+    } catch (err: any) {
+      // El backend devuelve el mensaje de error
+      const mensaje = err.response?.data?.mensaje || 'Error al conectar con el servidor';
+      setError(mensaje);
+    } finally {
+      setCargando(false);
+    }
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
 
-        {/* Logo */}
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">🏥</div>
           <h1 className="text-2xl font-bold text-gray-800">Consultora Salud</h1>
           <p className="text-sm text-gray-500 mt-1">Ingresa tus credenciales</p>
         </div>
 
-        {/* Formulario */}
         <form onSubmit={handleSubmit} className="space-y-4">
-
-          {/* Campo usuario */}
           <div>
             <label className="text-xs font-semibold text-gray-500 block mb-1">
               Usuario
@@ -107,7 +68,6 @@ export default function Login() {
             />
           </div>
 
-          {/* Campo contrasena */}
           <div>
             <label className="text-xs font-semibold text-gray-500 block mb-1">
               Contrasena
@@ -131,14 +91,12 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600 text-center">
               {error}
             </div>
           )}
 
-          {/* Boton */}
           <button
             type="submit"
             disabled={cargando}
@@ -146,10 +104,8 @@ export default function Login() {
           >
             {cargando ? 'Verificando...' : 'Ingresar al sistema'}
           </button>
-
         </form>
 
-        {/* Credenciales de prueba */}
         <div className="mt-6 p-3 bg-gray-50 rounded-lg">
           <p className="text-xs font-semibold text-gray-500 mb-2">Credenciales de prueba:</p>
           <div className="space-y-1 text-xs text-gray-500">

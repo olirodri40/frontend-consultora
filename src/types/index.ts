@@ -113,3 +113,28 @@ export type ParticipanteGeronto = {
   telefono?: string;
   ciclos: CicloGeronto[];
 };
+export type CitaAPI = {
+  id: number;
+  fecha: string;
+  hora: string;
+  modalidad: string;
+  sesion: string;
+  estado: string;
+  servicio_nombre: string | null;
+  monto: string | null;
+  metodo_pago: string | null;
+  estado_pago: string | null;
+  fecha_pago: string | null;
+  asistio: boolean | null;
+  patient_id: number;
+  paciente_nombre: string;
+  paciente_carnet: string;
+  paciente_telefono: string;
+  paciente_edad: number;
+  profesional_id: number;
+  profesional_nombre: string;
+  area_id: number;
+  area_nombre: string;
+  area_emoji: string;
+  area_color: string;
+};

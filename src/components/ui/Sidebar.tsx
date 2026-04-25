@@ -1,15 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const navItems = [
-  { to: '/',             emoji: '📊', label: 'Dashboard'    },
-  { to: '/agenda',       emoji: '📅', label: 'Agenda'       },
-  { to: '/pacientes',    emoji: '👥', label: 'Pacientes'    },
-  { to: '/zumba',        emoji: '💃', label: 'Zumba'        },
-  { to: '/gerontologia', emoji: '👴', label: 'Gerontologia' },
-  { to: '/reportes',     emoji: '📈', label: 'Reportes'     },
-];
-
 const rolesLabel: Record<string, string> = {
   administrador: 'Administrador',
   profesional:   'Profesional',
@@ -26,19 +17,29 @@ export default function Sidebar() {
     navigate('/login');
   }
 
+  const esAdmin = usuario?.rol === 'administrador' || usuario?.rol === 'supervisor';
+
+  const navItems = [
+    { to: '/',             emoji: '📊', label: 'Dashboard',    visible: true     },
+    { to: '/agenda',       emoji: '📅', label: 'Agenda',       visible: true     },
+    { to: '/pacientes',    emoji: '👥', label: 'Pacientes',    visible: true     },
+    { to: '/zumba',        emoji: '💃', label: 'Zumba',        visible: true     },
+    { to: '/gerontologia', emoji: '👴', label: 'Gerontologia', visible: true     },
+    { to: '/reportes',     emoji: '📈', label: 'Reportes',     visible: esAdmin  },
+    { to: '/admin',        emoji: '⚙️', label: 'Admin',        visible: esAdmin  },
+  ];
+
   return (
     <aside className="fixed left-0 top-0 h-screen w-60 bg-white border-r border-gray-200 flex flex-col z-20">
 
-      {/* Logo */}
       <div className="h-16 flex items-center px-4 border-b border-gray-200">
         <span className="text-sm font-bold text-emerald-600">
           🏥 Consultora Salud
         </span>
       </div>
 
-      {/* Navegacion */}
       <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => (
+        {navItems.filter(i => i.visible).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -57,9 +58,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer con usuario y logout */}
       <div className="border-t border-gray-200 p-3 space-y-1">
-        {/* Badge usuario */}
         <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-gray-50">
           <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
             {usuario?.nombre.charAt(0).toUpperCase()}
@@ -74,7 +73,6 @@ export default function Sidebar() {
           </div>
         </div>
 
-        {/* Boton logout */}
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"

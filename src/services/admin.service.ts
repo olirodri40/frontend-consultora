@@ -109,3 +109,7 @@ export async function actualizarActividadGeronto(id: number, datos: any) {
 export async function eliminarActividadGeronto(id: number) {
   await api.delete(`/services/geronto/actividades/${id}`);
 }
+export async function getTodosHorariosProfesionales() {
+  const response = await api.get('/users/horarios/todos');
+  return response.data.horarios;
+}

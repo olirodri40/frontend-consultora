@@ -19,3 +19,7 @@ export async function actualizarCitaService(
 ) {
   await api.put(`/citas/${id}`, datos);
 }
+export async function crearCita(datos: any) {
+  const response = await api.post('/citas', datos);
+  return response.data;
+}

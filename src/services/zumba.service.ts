@@ -26,3 +26,15 @@ export async function getAsistenciaZumba(cycleId: number) {
 export async function eliminarParticipanteZumba(id: number) {
   await api.delete(`/zumba/participantes/${id}`);
 }
+export async function getHorariosZumbaPublic() {
+  const response = await api.get('/services/zumba/horarios');
+  return response.data.horarios;
+}
+export async function editarParticipanteZumba(id: number, datos: any) {
+  await api.put(`/zumba/participantes/${id}`, datos);
+}
+
+export async function getAsistenciaCicloZumba(cycle_id: number) {
+  const response = await api.get(`/zumba/asistencia/${cycle_id}`);
+  return response.data.asistencia;
+}

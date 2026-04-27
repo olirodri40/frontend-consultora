@@ -22,3 +22,14 @@ export async function renovarCicloGeronto(id: number, datos: any) {
 export async function marcarAsistenciaGeronto(datos: any) {
   await api.post('/geronto/asistencia', datos);
 }
+export async function getAsistenciaCiclo(cycle_id: number) {
+  const response = await api.get(`/geronto/asistencia/${cycle_id}`);
+  return response.data.asistencia;
+}
+export async function editarParticipanteGeronto(id: number, datos: any) {
+  await api.put(`/geronto/participantes/${id}`, datos);
+}
+
+export async function eliminarParticipanteGeronto(id: number) {
+  await api.delete(`/geronto/participantes/${id}`);
+}

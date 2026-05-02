@@ -21,3 +21,7 @@ export async function crearPaciente(datos: any) {
   const response = await api.post('/pacientes', datos);
   return response.data;
 }
+export async function actualizarPacienteService(id: number, datos: any) {
+  const res = await api.put(`/pacientes/${id}`, datos);
+  return res.data;
+}

@@ -1,3 +1,4 @@
+import React from 'react'; // ← AGREGAR ESTA LÍNEA al inicio si no la tienes
 import { useState, useEffect } from 'react';
 import { getCitas, actualizarCitaService, crearCita, crearMultiplesCitas, eliminarCitaService } from '../services/citas.service';
 import { getTodosHorariosProfesionales, getProfesionales, getServicios } from '../services/admin.service';
@@ -5,6 +6,7 @@ import { getPacientes } from '../services/pacientes.service';
 
 const DIAS_SEMANA = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 const DIAS_JS: Record<number, string> = { 0: 'Domingo', 1: 'Lunes', 2: 'Martes', 3: 'Miercoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sabado' };
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 export default function Agenda() {
   const [citas, setCitas] = useState<any[]>([]);
@@ -13,8 +15,13 @@ export default function Agenda() {
   const [servicios, setServicios] = useState<any[]>([]);
   const [pacientes, setPacientes] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [profSeleccionado, setProfSeleccionado] = useState<any>(null);
-  const [areaExpandida, setAreaExpandida] = useState<string>('');
+  const [profSeleccionado, setProfSeleccionado] = useState<any>(() => {
+    const saved = localStorage.getItem('agenda_prof');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [areaExpandida, setAreaExpandida] = useState<string>(() => {
+    return localStorage.getItem('agenda_area') || '';
+  });
   const [citaSeleccionada, setCitaSeleccionada] = useState<any>(null);
   const [modalNuevaCita, setModalNuevaCita] = useState<any>(null);
   const [editandoCita, setEditandoCita] = useState(false);
@@ -23,24 +30,21 @@ export default function Agenda() {
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState<any>(null);
   const [modoNuevoPaciente, setModoNuevoPaciente] = useState(false);
   const [sesionesAdicionales, setSesionesAdicionales] = useState<{fecha: string, hora: string}[]>([]);
-
+  const [vistaActual, setVistaActual] = useState<'semana' | 'mes'>(() => {
+    return (localStorage.getItem('agenda_vista') as 'semana' | 'mes') || 'semana';
+  });
   const [formPaciente, setFormPaciente] = useState({ nombre: '', telefono: '', carnet: '', edad: '' });
   const [formCita, setFormCita] = useState({
-    total_sesiones: 1,
-    modalidad: 'presencial',
-    estado: 'pendiente',
-    monto_total: '',
-    monto_pagado: '',
-    metodo_pago: 'efectivo',
-    servicio_id: '',
-    servicio_nombre: '',
-    notas: '',
+    total_sesiones: 1, modalidad: 'presencial', estado: 'pendiente',
+    monto_total: '', monto_pagado: '', metodo_pago: 'efectivo',
+    servicio_id: '', servicio_nombre: '', notas: '',
   });
 
   const [formEditar, setFormEditar] = useState<any>({});
-  const [sesionesAdicionalesEditar, setSesionesAdicionalesEditar] = useState<{fecha: string, hora: string}[]>([]); 
+  const [sesionesAdicionalesEditar, setSesionesAdicionalesEditar] = useState<{fecha: string, hora: string}[]>([]);
   const [reagendando, setReagendando] = useState(false);
   const [formReagendar, setFormReagendar] = useState({ fecha: '', hora: '' });
+
   const [inicioSemana, setInicioSemana] = useState(() => {
     const hoy = new Date();
     const dia = hoy.getDay();
@@ -50,7 +54,63 @@ export default function Agenda() {
     return lunes;
   });
 
+  const [mesActual, setMesActual] = useState(() => {
+    const hoy = new Date();
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    if (profSeleccionado) localStorage.setItem('agenda_prof', JSON.stringify(profSeleccionado));
+    else localStorage.removeItem('agenda_prof');
+  }, [profSeleccionado]);
+
+  useEffect(() => {
+    localStorage.setItem('agenda_vista', vistaActual);
+  }, [vistaActual]);
+
+  useEffect(() => {
+    localStorage.setItem('agenda_area', areaExpandida);
+  }, [areaExpandida]);
+
   useEffect(() => { cargarDatos(); }, []);
+
+  // 🆕 Obtener el slot_minutos del profesional seleccionado
+  const slotMinutosProfesional = profSeleccionado 
+    ? (horariosProf.find(h => h.user_id === profSeleccionado.id)?.slot_minutos || 60)
+    : 60;
+
+  // 🆕 FUNCIÓN: Verificar si una hora está ocupada por gerontología
+  function horaOcupadaPorGeronto(fecha: string, hora: string): { ocupado: boolean; detalle: string } {
+    if (!profSeleccionado?.actividades_geronto?.length) {
+      return { ocupado: false, detalle: '' };
+    }
+
+    const fechaObj = new Date(fecha + 'T00:00:00');
+    const diaNombre = DIAS_JS[fechaObj.getDay()];
+    
+    const actividad = profSeleccionado.actividades_geronto.find((act: any) => {
+      if (act.dia !== diaNombre) return false;
+      
+      const [horaIniH, horaIniM] = (act.hora_inicio || '').split(':').map(Number);
+      const [horaFinH, horaFinM] = (act.hora_fin || '').split(':').map(Number);
+      const [horaSlotH, horaSlotM] = hora.split(':').map(Number);
+      
+      const minutosInicio = horaIniH * 60 + horaIniM;
+      const minutosFin = horaFinH * 60 + horaFinM;
+      const minutosSlot = horaSlotH * 60 + horaSlotM;
+      
+      return minutosSlot >= minutosInicio && minutosSlot < minutosFin;
+    });
+
+    if (actividad) {
+      return {
+        ocupado: true,
+        detalle: `Gerontología - ${actividad.nombre}`
+      };
+    }
+
+    return { ocupado: false, detalle: '' };
+  }
 
   async function cargarDatos() {
     try {
@@ -73,6 +133,12 @@ export default function Agenda() {
     setInicioSemana(nueva);
   }
 
+  function cambiarMes(meses: number) {
+    const nuevo = new Date(mesActual);
+    nuevo.setMonth(nuevo.getMonth() + meses);
+    setMesActual(nuevo);
+  }
+
   function irAHoy() {
     const hoy = new Date();
     const dia = hoy.getDay();
@@ -80,6 +146,7 @@ export default function Agenda() {
     const lunes = new Date(hoy.setDate(diff));
     lunes.setHours(0, 0, 0, 0);
     setInicioSemana(lunes);
+    setMesActual(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   }
 
   function getFechaDia(offset: number): Date {
@@ -93,103 +160,306 @@ export default function Agenda() {
     return horariosProf.filter(h => h.user_id === profSeleccionado.id && h.dia === diaNombre);
   }
 
+  // 🆕 MODIFICADO: Generar slots dinámicos según slot_minutos
   function horasProfParaDia(userId: number, fecha: string): string[] {
     if (!fecha) return [];
+    
     const d = new Date(fecha + 'T00:00:00');
     const diaNombre = DIAS_JS[d.getDay()];
-    const horarios = horariosProf.filter(h => h.user_id === userId && h.dia === diaNombre);
+    
+    const horarios = horariosProf.filter(h => 
+      h.user_id === userId && h.dia === diaNombre
+    );
+    
     const horas = new Set<string>();
+    
     horarios.forEach(h => {
-      const inicio = parseInt(h.hora_inicio?.slice(0, 2));
-      const fin = parseInt(h.hora_fin?.slice(0, 2));
-      for (let i = inicio; i < fin; i++) horas.add(`${String(i).padStart(2,'0')}:00`);
+      const slotMinutos = h.slot_minutos || 60;
+      
+      const [horaIni, minIni] = (h.hora_inicio || '08:00').split(':').map(Number);
+      const [horaFin, minFin] = (h.hora_fin || '17:00').split(':').map(Number);
+      
+      const minutosInicio = horaIni * 60 + minIni;
+      const minutosFin = horaFin * 60 + minFin;
+      
+      for (let minutos = minutosInicio; minutos < minutosFin; minutos += slotMinutos) {
+        const hora = Math.floor(minutos / 60);
+        const min = minutos % 60;
+        horas.add(`${String(hora).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
+      }
     });
+    
     return Array.from(horas).sort();
   }
+
+
+// ✅ CORREGIDO: Obtener slot_minutos del profesional
+function getSlotMinutosProfesional(): number {
+  if (!profSeleccionado) return 60;
+  const horariosProfe = horariosProf.filter(h => h.user_id === profSeleccionado.id);
+  return horariosProfe[0]?.slot_minutos || 60;
+}
+
+// ✅ CORREGIDO: Detectar si un slot está ocupado por una cita (incluyendo multi-slot)
+function getCitaEnSlot(hora: string, offset: number): any {
+  const citasDelDia = citasProfDia(offset);
+  if (citasDelDia.length === 0) return null;
+  
+  const slotMinutos = getSlotMinutosProfesional();
+  const fecha = getFechaDia(offset);
+  const fechaStr = fecha.toISOString().split('T')[0];
+  const horasDelDia = horasProfParaDia(profSeleccionado!.id, fechaStr);
+  
+  // 1. Buscar cita exacta en esta hora
+  for (const cita of citasDelDia) {
+    if (cita.hora?.slice(0,5) === hora && cita.estado !== 'cancelada') {
+      return cita;
+    }
+  }
+  
+  // 2. Buscar si este slot pertenece a una cita que empezó antes (por duración)
+  for (const cita of citasDelDia) {
+    if (!cita.duracion_min || cita.duracion_min <= slotMinutos) continue;
+    if (cita.estado === 'cancelada') continue;
+    
+    const horaInicio = cita.hora?.slice(0,5);
+    const idxInicio = horasDelDia.indexOf(horaInicio);
+    const idxActual = horasDelDia.indexOf(hora);
+    
+    if (idxInicio === -1 || idxActual === -1) continue;
+    
+    const slotsOcupados = Math.ceil(cita.duracion_min / slotMinutos);
+    
+    // El slot actual está dentro del rango [inicio, inicio + slotsOcupados)
+    if (idxActual >= idxInicio && idxActual < idxInicio + slotsOcupados) {
+      return cita;
+    }
+  }
+  
+  return null;
+}
+
+// ✅ CORREGIDO: Verificar si un slot está disponible
+function isSlotDisponible(hora: string, offset: number): boolean {
+  const diaNombre = DIAS_SEMANA[offset];
+  
+  // Fuera de horario laboral
+  if (!estaEnHorario(hora, diaNombre)) return false;
+  
+  // Ocupado por cita (incluye multi-slot)
+  const cita = getCitaEnSlot(hora, offset);
+  if (cita) return false;
+  
+  // Ocupado por gerontología
+  const fecha = getFechaDia(offset);
+  const fechaStr = fecha.toISOString().split('T')[0];
+  const geronto = horaOcupadaPorGeronto(fechaStr, hora);
+  if (geronto.ocupado) return false;
+  
+  return true;
+}
+
+// ✅ CORREGIDO: Determinar estilos de borde para multi-slot
+function getEstilosCelda(hora: string, offset: number): string {
+  const cita = getCitaEnSlot(hora, offset);
+  if (!cita || !cita.duracion_min) return 'rounded-lg mb-0.5';
+  
+  const slotMinutos = getSlotMinutosProfesional();
+  if (cita.duracion_min <= slotMinutos) return 'rounded-lg mb-0.5';
+  
+  const fecha = getFechaDia(offset);
+  const fechaStr = fecha.toISOString().split('T')[0];
+  const horasDelDia = horasProfParaDia(profSeleccionado!.id, fechaStr);
+  
+  const horaInicio = cita.hora?.slice(0,5);
+  const idxInicio = horasDelDia.indexOf(horaInicio);
+  const idxActual = horasDelDia.indexOf(hora);
+  const slotsOcupados = Math.ceil(cita.duracion_min / slotMinutos);
+  
+  const esPrimero = idxActual === idxInicio;
+  const esUltimo = idxActual === idxInicio + slotsOcupados - 1;
+  
+  if (esPrimero && esUltimo) return 'rounded-lg mb-0.5';
+  if (esPrimero) return 'rounded-t-lg border-b-0 mb-0';
+  if (esUltimo) return 'rounded-b-lg border-t-0 mb-0.5';
+  return 'rounded-none border-t-0 border-b-0 mb-0';
+}
+ 
 
   function horasProfCalendario(): string[] {
     if (!profSeleccionado) return [];
     const horas = new Set<string>();
+    
     DIAS_SEMANA.forEach(dia => {
       horariosProfDia(dia).forEach(h => {
-        const inicio = parseInt(h.hora_inicio?.slice(0, 2));
-        const fin = parseInt(h.hora_fin?.slice(0, 2));
-        for (let i = inicio; i < fin; i++) horas.add(`${String(i).padStart(2,'0')}:00`);
+        const slotMinutos = h.slot_minutos || 60;
+        const [horaIni, minIni] = (h.hora_inicio || '08:00').split(':').map(Number);
+        const [horaFin, minFin] = (h.hora_fin || '17:00').split(':').map(Number);
+        
+        const minutosInicio = horaIni * 60 + minIni;
+        const minutosFin = horaFin * 60 + minFin;
+        
+        for (let minutos = minutosInicio; minutos < minutosFin; minutos += slotMinutos) {
+          const h = Math.floor(minutos / 60);
+          const m = minutos % 60;
+          horas.add(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+        }
       });
     });
+    
     return Array.from(horas).sort();
   }
 
   function citasProfDia(offset: number) {
-    if (!profSeleccionado) return [];
-    const fecha = getFechaDia(offset);
-    const fechaStr = fecha.toISOString().split('T')[0];
-    return citas.filter(c => c.fecha.startsWith(fechaStr) && c.profesional_id === profSeleccionado.id).sort((a, b) => a.hora.localeCompare(b.hora));
-  }
+  if (!profSeleccionado) return [];
+  const fecha = getFechaDia(offset);
+  const fechaStr = fecha.toISOString().split('T')[0];
+  return citas.filter(c => c.fecha.startsWith(fechaStr) && c.profesional_id === profSeleccionado.id).sort((a, b) => a.hora.localeCompare(b.hora));
+}
 
   function estaEnHorario(hora: string, diaNombre: string): boolean {
-    return horariosProfDia(diaNombre).some(h => hora >= h.hora_inicio?.slice(0,5) && hora < h.hora_fin?.slice(0,5));
+    return horariosProfDia(diaNombre).some(h => {
+      const slotMinutos = h.slot_minutos || 60;
+      const [horaIniH, horaIniM] = (h.hora_inicio || '').split(':').map(Number);
+      const [horaFinH, horaFinM] = (h.hora_fin || '').split(':').map(Number);
+      const [horaSlotH, horaSlotM] = hora.split(':').map(Number);
+      
+      const minutosInicio = horaIniH * 60 + horaIniM;
+      const minutosFin = horaFinH * 60 + horaFinM;
+      const minutosSlot = horaSlotH * 60 + horaSlotM;
+      
+      return minutosSlot >= minutosInicio && minutosSlot < minutosFin;
+    });
   }
 
-  function citaEnHora(hora: string, offset: number) {
-    return citasProfDia(offset).find(c => c.hora?.slice(0,5) === hora);
+ 
+
+  function getDiasMes(): (Date | null)[] {
+    const año = mesActual.getFullYear();
+    const mes = mesActual.getMonth();
+    const primerDia = new Date(año, mes, 1);
+    const ultimoDia = new Date(año, mes + 1, 0);
+    const diasEnMes = ultimoDia.getDate();
+
+    let primerDiaSemana = primerDia.getDay();
+    primerDiaSemana = primerDiaSemana === 0 ? 6 : primerDiaSemana - 1;
+
+    const dias: (Date | null)[] = [];
+    for (let i = 0; i < primerDiaSemana; i++) dias.push(null);
+    for (let i = 1; i <= diasEnMes; i++) dias.push(new Date(año, mes, i));
+    return dias;
   }
+
+  function citasDelDia(fecha: Date): any[] {
+    if (!profSeleccionado) return [];
+    const fechaStr = fecha.toISOString().split('T')[0];
+    return citas.filter(c => c.fecha.startsWith(fechaStr) && c.profesional_id === profSeleccionado.id);
+  }
+
+  function profTrabajaDia(fecha: Date): boolean {
+    const diaNombre = DIAS_JS[fecha.getDay()];
+    return horariosProf.some(h => h.user_id === profSeleccionado?.id && h.dia === diaNombre);
+  }
+
+ function abrirModalNuevaCitaMes(fecha: Date) {
+  if (!profSeleccionado) return;
+  const fechaStr = fecha.toISOString().split('T')[0];
+  if (!profTrabajaDia(fecha)) return;
+  
+  const horas = horasProfParaDia(profSeleccionado.id, fechaStr);
+  
+  // ✅ CORREGIDO: Usar isSlotDisponible
+  const diaSemana = DIAS_JS[fecha.getDay()];
+  const offsetDia = DIAS_SEMANA.indexOf(diaSemana);
+  
+  const primeraHoraLibre = horas.find(h => isSlotDisponible(h, offsetDia));
+  
+  if (!primeraHoraLibre) {
+    alert('No hay horarios disponibles para este día');
+    return;
+  }
+  
+  setModalNuevaCita({ hora: primeraHoraLibre, fecha: fechaStr });
+  setPacienteSeleccionado(null);
+  setBuscarPaciente('');
+  setModoNuevoPaciente(true);
+  setFormPaciente({ nombre: '', telefono: '', carnet: '', edad: '' });
+  setFormCita({ total_sesiones: 1, modalidad: 'presencial', estado: 'pendiente', monto_total: '', monto_pagado: '', metodo_pago: 'efectivo', servicio_id: '', servicio_nombre: '', notas: '' });
+  setSesionesAdicionales([]);
+}
 
   function abrirModalNuevaCita(hora: string, offset: number) {
-    const fecha = getFechaDia(offset);
-    const fechaStr = fecha.toISOString().split('T')[0];
-    const ocupada = citas.some(c =>
-      c.fecha.startsWith(fechaStr) &&
-      c.profesional_id === profSeleccionado.id &&
-      c.hora?.slice(0,5) === hora &&
-      c.estado !== 'cancelada'
-    );
-    if (ocupada) return;
+  const fecha = getFechaDia(offset);
+  const fechaStr = fecha.toISOString().split('T')[0];
+  
+  // ✅ USA isSlotDisponible en vez de las funciones viejas
+  if (!isSlotDisponible(hora, offset)) return;
 
-    setModalNuevaCita({ hora, fecha: fechaStr });
-    setPacienteSeleccionado(null);
-    setBuscarPaciente('');
-    setModoNuevoPaciente(true);
-    setFormPaciente({ nombre: '', telefono: '', carnet: '', edad: '' });
-    setFormCita({ total_sesiones: 1, modalidad: 'presencial', estado: 'pendiente', monto_total: '', monto_pagado: '', metodo_pago: 'efectivo', servicio_id: '', servicio_nombre: '', notas: '' });
-    setSesionesAdicionales([]);
-  }
+  setModalNuevaCita({ hora, fecha: fechaStr });
+  setPacienteSeleccionado(null);
+  setBuscarPaciente('');
+  setModoNuevoPaciente(true);
+  setFormPaciente({ nombre: '', telefono: '', carnet: '', edad: '' });
+  setFormCita({ total_sesiones: 1, modalidad: 'presencial', estado: 'pendiente', monto_total: '', monto_pagado: '', metodo_pago: 'efectivo', servicio_id: '', servicio_nombre: '', notas: '' });
+  setSesionesAdicionales([]);
+}
 
   async function guardarNuevaCita(e: React.FormEvent) {
     e.preventDefault();
-
-    const ocupadaSesion1 = citas.some(c =>
-      c.fecha.startsWith(modalNuevaCita.fecha) &&
-      c.profesional_id === profSeleccionado.id &&
-      c.hora?.slice(0,5) === modalNuevaCita.hora &&
-      c.estado !== 'cancelada'
-    );
-    if (ocupadaSesion1) {
-      alert(`La hora ${modalNuevaCita.hora} ya esta ocupada. Selecciona otro horario disponible.`);
-      return;
+    
+    // 🆕 Verificar que el slot principal no esté ocupado (incluyendo slots bloqueados por duración)
+    const fechaObj = new Date(modalNuevaCita.fecha + 'T00:00:00');
+    const diaSemana = DIAS_JS[fechaObj.getDay()];
+    const offsetDia = DIAS_SEMANA.indexOf(diaSemana);
+    
+    // ✅ CORREGIDO
+if (!isSlotDisponible(modalNuevaCita.hora, offsetDia)) { 
+  alert(`La hora ${modalNuevaCita.hora} ya está ocupada.`); 
+  return; 
+}
+    
+    // 🆕 Si seleccionó un servicio con duración, verificar que los slots siguientes estén libres
+    const servicioSeleccionado = servicios.find(s => String(s.id) === formCita.servicio_id);
+    if (servicioSeleccionado?.duracion_min && servicioSeleccionado.duracion_min > slotMinutosProfesional) {
+      const slotsNecesarios = Math.ceil(servicioSeleccionado.duracion_min / slotMinutosProfesional);
+      const todasHoras = horasProfParaDia(profSeleccionado.id, modalNuevaCita.fecha);
+      const idxHoraInicio = todasHoras.indexOf(modalNuevaCita.hora);
+      
+      if (idxHoraInicio !== -1) {
+        for (let i = 1; i < slotsNecesarios; i++) {
+          const horaSiguiente = todasHoras[idxHoraInicio + i];
+          if (!horaSiguiente) {
+            alert(`El servicio requiere ${servicioSeleccionado.duracion_min} minutos pero no hay suficientes slots disponibles.`);
+            return;
+          }
+          
+         // ✅ CORREGIDO
+if (!isSlotDisponible(horaSiguiente, offsetDia)) {
+            alert(`La hora ${horaSiguiente} está ocupada. El servicio requiere ${servicioSeleccionado.duracion_min} minutos.`);
+            return;
+          }
+          
+          const gerontoOcupado = horaOcupadaPorGeronto(modalNuevaCita.fecha, horaSiguiente);
+          if (gerontoOcupado.ocupado) {
+            alert(`La hora ${horaSiguiente} está reservada para gerontología.`);
+            return;
+          }
+        }
+      }
     }
-
+    
     for (const s of sesionesAdicionales) {
-      if (!s.fecha || !s.hora) {
-        alert('Completa la fecha y hora de todas las sesiones adicionales');
-        return;
-      }
+      if (!s.fecha || !s.hora) { alert('Completa la fecha y hora de todas las sesiones adicionales'); return; }
       const ocupada = citas.some(c =>
-        c.fecha.startsWith(s.fecha) &&
-        c.profesional_id === profSeleccionado.id &&
-        c.hora?.slice(0,5) === s.hora &&
-        c.estado !== 'cancelada'
+        c.fecha.startsWith(s.fecha) && c.profesional_id === profSeleccionado.id &&
+        c.hora?.slice(0,5) === s.hora && c.estado !== 'cancelada'
       );
-      if (ocupada) {
-        alert(`La hora ${s.hora} del ${s.fecha} ya esta ocupada. Selecciona otro horario.`);
-        return;
-      }
+      if (ocupada) { alert(`La hora ${s.hora} del ${s.fecha} ya está ocupada.`); return; }
     }
-
+    
     try {
       setGuardandoCita(true);
       let datosPaciente: any = {};
-
       if (modoNuevoPaciente) {
         if (!formPaciente.nombre) { alert('El nombre es obligatorio'); return; }
         datosPaciente = { paciente_nombre: formPaciente.nombre, paciente_telefono: formPaciente.telefono || null, paciente_carnet: formPaciente.carnet || null, paciente_edad: formPaciente.edad || null };
@@ -197,112 +467,87 @@ export default function Agenda() {
         if (!pacienteSeleccionado) { alert('Selecciona un paciente'); return; }
         datosPaciente = { paciente_nombre: pacienteSeleccionado.nombre, paciente_telefono: pacienteSeleccionado.telefono || null, paciente_carnet: pacienteSeleccionado.carnet || null, paciente_edad: pacienteSeleccionado.edad || null };
       }
-
+      
       const datosComunes = {
-        ...datosPaciente,
-        professional_id: profSeleccionado.id,
+        ...datosPaciente, 
+        professional_id: profSeleccionado.id, 
         area_id: profSeleccionado.area_id,
-        total_sesiones: formCita.total_sesiones,
-        modalidad: formCita.modalidad,
+        total_sesiones: formCita.total_sesiones, 
+        modalidad: formCita.modalidad, 
         estado: formCita.estado,
         monto_total: formCita.estado === 'confirmada' ? (formCita.monto_total || null) : null,
         monto_pagado: formCita.estado === 'confirmada' ? (formCita.monto_pagado || null) : null,
         metodo_pago: formCita.estado === 'confirmada' ? formCita.metodo_pago : null,
-        servicio_nombre: formCita.servicio_nombre || null,
+        servicio_nombre: formCita.servicio_nombre || null, 
         notas: formCita.notas || null,
+        duracion_min: servicioSeleccionado?.duracion_min || null, // 🆕 Guardar duración del servicio
       };
-
+      
       const todasSesiones = [
         { ...datosComunes, fecha: modalNuevaCita.fecha, hora: modalNuevaCita.hora, sesion: 1 },
         ...sesionesAdicionales.map((s, idx) => ({
-          ...datosComunes,
-           fecha: s.fecha,
-  hora: s.hora,
-  sesion: idx + 2,
-  monto_total: formCita.estado === 'confirmada' ? (formCita.monto_total || null) : null,
-  monto_pagado: formCita.estado === 'confirmada' ? (formCita.monto_pagado || null) : null,
-})),
+          ...datosComunes, fecha: s.fecha, hora: s.hora, sesion: idx + 2,
+          monto_total: formCita.estado === 'confirmada' ? (formCita.monto_total || null) : null,
+          monto_pagado: formCita.estado === 'confirmada' ? (formCita.monto_pagado || null) : null,
+          duracion_min: null, // Las sesiones adicionales no heredan la duración
+        })),
       ];
-
+      
       await crearMultiplesCitas(todasSesiones);
       setModalNuevaCita(null);
       await cargarDatos();
     } catch (err: any) {
       alert(err.response?.data?.mensaje || 'Error al crear cita');
-    } finally {
-      setGuardandoCita(false);
-    }
+    } finally { setGuardandoCita(false); }
   }
 
-async function guardarEdicionCita(e: React.FormEvent) {
-  e.preventDefault();
-  try {
-    setGuardandoCita(true);
-
-    // Verificar sesiones adicionales
-    for (const s of sesionesAdicionalesEditar) {
-      if (!s.fecha || !s.hora) {
-        alert('Completa la fecha y hora de todas las sesiones adicionales');
-        return;
+  async function guardarEdicionCita(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setGuardandoCita(true);
+      for (const s of sesionesAdicionalesEditar) {
+        if (!s.fecha || !s.hora) { alert('Completa la fecha y hora de todas las sesiones adicionales'); return; }
+        const ocupada = citas.some(c =>
+          c.fecha.startsWith(s.fecha) && c.profesional_id === citaSeleccionada.profesional_id &&
+          c.hora?.slice(0,5) === s.hora && c.estado !== 'cancelada'
+        );
+        if (ocupada) { alert(`La hora ${s.hora} del ${s.fecha} ya está ocupada.`); return; }
       }
-      const ocupada = citas.some(c =>
-        c.fecha.startsWith(s.fecha) &&
-        c.profesional_id === citaSeleccionada.profesional_id &&
-        c.hora?.slice(0,5) === s.hora &&
-        c.estado !== 'cancelada'
+      const citasRelacionadas = citas.filter(c =>
+        c.patient_id === citaSeleccionada.patient_id && c.profesional_id === citaSeleccionada.profesional_id
       );
-      if (ocupada) {
-        alert(`La hora ${s.hora} del ${s.fecha} ya esta ocupada.`);
-        return;
+      await Promise.all(citasRelacionadas.map(c =>
+        actualizarCitaService(c.id, {
+          estado: formEditar.estado, monto_total: formEditar.monto_total || null,
+          monto_pagado: formEditar.monto_pagado || null, metodo_pago: formEditar.metodo_pago || null,
+          total_sesiones: formEditar.total_sesiones, modalidad: formEditar.modalidad,
+          servicio_nombre: formEditar.servicio_nombre || null, notas: formEditar.notas || null,
+          paciente_nombre: formEditar.nombre || null, paciente_telefono: formEditar.telefono || null,
+          paciente_carnet: formEditar.carnet || null, paciente_edad: formEditar.edad || null,
+        })
+      ));
+      if (sesionesAdicionalesEditar.length > 0) {
+        const datosPaciente = {
+          paciente_nombre: formEditar.nombre || citaSeleccionada.paciente_nombre,
+          paciente_telefono: formEditar.telefono || citaSeleccionada.paciente_telefono || null,
+          paciente_carnet: formEditar.carnet || citaSeleccionada.paciente_carnet || null,
+          paciente_edad: formEditar.edad || citaSeleccionada.paciente_edad || null,
+        };
+        const sesionesNuevas = sesionesAdicionalesEditar.map((s, idx) => ({
+          ...datosPaciente, professional_id: citaSeleccionada.profesional_id, area_id: citaSeleccionada.area_id,
+          fecha: s.fecha, hora: s.hora, sesion: parseInt(citaSeleccionada.sesion || '1') + idx + 1,
+          total_sesiones: formEditar.total_sesiones, modalidad: formEditar.modalidad, estado: formEditar.estado,
+          monto_total: formEditar.monto_total || null, monto_pagado: formEditar.monto_pagado || null,
+          metodo_pago: formEditar.metodo_pago || null, notas: formEditar.notas || null,
+        }));
+        await crearMultiplesCitas(sesionesNuevas);
       }
-    }
-
-    // Actualizar cita actual
-      await actualizarCitaService(citaSeleccionada.id, {
-      estado: formEditar.estado,
-      monto_total: formEditar.monto_total || null,
-      monto_pagado: formEditar.monto_pagado || null,
-      metodo_pago: formEditar.metodo_pago || null,
-      notas: formEditar.notas || null,
-      total_sesiones: formEditar.total_sesiones,
-      modalidad: formEditar.modalidad,
-      servicio_nombre: formEditar.servicio_nombre || null,
-      });
-
-    // Crear sesiones adicionales si existen
-    if (sesionesAdicionalesEditar.length > 0) {
-      const datosPaciente = {
-        paciente_nombre: citaSeleccionada.paciente_nombre,
-        paciente_telefono: citaSeleccionada.paciente_telefono || null,
-        paciente_carnet: citaSeleccionada.paciente_carnet || null,
-        paciente_edad: citaSeleccionada.paciente_edad || null,
-      };
-      const sesionesNuevas = sesionesAdicionalesEditar.map((s, idx) => ({
-        ...datosPaciente,
-        professional_id: citaSeleccionada.profesional_id,
-        area_id: citaSeleccionada.area_id,
-        fecha: s.fecha,
-        hora: s.hora,
-        sesion: parseInt(citaSeleccionada.sesion || '1') + idx + 1,
-        total_sesiones: formEditar.total_sesiones,
-        modalidad: formEditar.modalidad,
-        estado: formEditar.estado,
-        monto_total: formEditar.monto_total || null,
-        monto_pagado: 0,
-        metodo_pago: formEditar.metodo_pago || null,
-        notas: formEditar.notas || null,
-      }));
-      await crearMultiplesCitas(sesionesNuevas);
-    }
-
-    setEditandoCita(false);
-    setCitaSeleccionada(null);
-    setSesionesAdicionalesEditar([]);
-    await cargarDatos();
-  } catch (err: any) {
-    alert(err.response?.data?.mensaje || 'Error al actualizar');
-  } finally { setGuardandoCita(false); }
-}
+      setEditandoCita(false); setCitaSeleccionada(null); setSesionesAdicionalesEditar([]);
+      await cargarDatos();
+    } catch (err: any) {
+      alert(err.response?.data?.mensaje || 'Error al actualizar');
+    } finally { setGuardandoCita(false); }
+  }
 
   async function marcarAsistencia(id: number, asistio: boolean) {
     try {
@@ -312,9 +557,34 @@ async function guardarEdicionCita(e: React.FormEvent) {
     } catch (err) { console.error(err); }
   }
 
+  async function eliminarCita(id: number) {
+    if (!confirm('¿Seguro que deseas eliminar esta cita?')) return;
+    try {
+      await eliminarCitaService(id);
+      setCitaSeleccionada(null);
+      await cargarDatos();
+    } catch (err: any) { alert(err.response?.data?.mensaje || 'Error al eliminar'); }
+  }
+
+  async function guardarReagendar() {
+    if (!formReagendar.fecha || !formReagendar.hora) { alert('Selecciona fecha y hora'); return; }
+    const ocupada = citas.some(c =>
+      c.fecha.startsWith(formReagendar.fecha) && c.profesional_id === citaSeleccionada.profesional_id &&
+      c.hora?.slice(0,5) === formReagendar.hora && c.estado !== 'cancelada' && c.id !== citaSeleccionada.id
+    );
+    if (ocupada) { alert(`La hora ${formReagendar.hora} ya está ocupada.`); return; }
+    try {
+      await actualizarCitaService(citaSeleccionada.id, { fecha: formReagendar.fecha, hora: formReagendar.hora });
+      setReagendando(false); setCitaSeleccionada(null);
+      await cargarDatos();
+    } catch (err: any) { alert(err.response?.data?.mensaje || 'Error al reagendar'); }
+  }
+
   const finSemana = new Date(inicioSemana);
   finSemana.setDate(finSemana.getDate() + 5);
-  const rangoLabel = `${inicioSemana.toLocaleDateString('es', { day: 'numeric', month: 'short' })} - ${finSemana.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const rangoLabel = vistaActual === 'semana'
+    ? `${inicioSemana.toLocaleDateString('es', { day: 'numeric', month: 'short' })} - ${finSemana.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}`
+    : `${MESES[mesActual.getMonth()]} ${mesActual.getFullYear()}`;
 
   const areasProfesionales = profesionales.reduce((acc: any, p: any) => {
     const area = p.area_nombre || 'Sin area';
@@ -347,47 +617,10 @@ async function guardarEdicionCita(e: React.FormEvent) {
       </div>
     );
   }
-async function eliminarCita(id: number) {
-  if (!confirm('¿Seguro que deseas eliminar esta cita?')) return;
-  try {
-    await eliminarCitaService(id);
-    setCitaSeleccionada(null);
-    await cargarDatos();
-  } catch (err: any) {
-    alert(err.response?.data?.mensaje || 'Error al eliminar');
-  }
-}
-async function guardarReagendar() {
-  if (!formReagendar.fecha || !formReagendar.hora) {
-    alert('Selecciona fecha y hora');
-    return;
-  }
-  const ocupada = citas.some(c =>
-    c.fecha.startsWith(formReagendar.fecha) &&
-    c.profesional_id === citaSeleccionada.profesional_id &&
-    c.hora?.slice(0,5) === formReagendar.hora &&
-    c.estado !== 'cancelada' &&
-    c.id !== citaSeleccionada.id
-  );
-  if (ocupada) {
-    alert(`La hora ${formReagendar.hora} ya esta ocupada.`);
-    return;
-  }
-  try {
-    await actualizarCitaService(citaSeleccionada.id, {
-      fecha: formReagendar.fecha,
-      hora: formReagendar.hora,
-    });
-    setReagendando(false);
-    setCitaSeleccionada(null);
-    await cargarDatos();
-  } catch (err: any) {
-    alert(err.response?.data?.mensaje || 'Error al reagendar');
-  }
-}
 
   return (
     <div>
+      {/* Header */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-800">📅 Agenda</h1>
@@ -397,19 +630,36 @@ async function guardarReagendar() {
             <p className="text-sm text-gray-500">Selecciona un profesional</p>
           )}
         </div>
-        {profSeleccionado && profTieneHorarios && (
-          <div className="flex gap-2">
-            <button onClick={() => cambiarSemana(-7)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">← Anterior</button>
-            <button onClick={irAHoy} className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700">Hoy</button>
-            <button onClick={() => cambiarSemana(7)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">Siguiente →</button>
+        <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+            <button onClick={() => setVistaActual('semana')}
+              className={`px-3 py-2 text-sm font-medium ${vistaActual === 'semana' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+              📅 Semana
+            </button>
+            <button onClick={() => setVistaActual('mes')}
+              className={`px-3 py-2 text-sm font-medium ${vistaActual === 'mes' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+              🗓 Mes
+            </button>
           </div>
-        )}
+
+          {profSeleccionado && profTieneHorarios && (
+            <>
+              <button onClick={() => vistaActual === 'semana' ? cambiarSemana(-7) : cambiarMes(-1)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">← Anterior</button>
+              <button onClick={irAHoy}
+                className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700">Hoy</button>
+              <button onClick={() => vistaActual === 'semana' ? cambiarSemana(7) : cambiarMes(1)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">Siguiente →</button>
+            </>
+          )}
+        </div>
       </div>
 
       {cargando ? (
         <div className="text-center py-12 text-gray-500">Cargando...</div>
       ) : (
         <div className="flex gap-4">
+          {/* Panel de profesionales */}
           <div className="w-52 shrink-0">
             <div className="bg-white rounded-xl border overflow-hidden sticky top-4">
               <div className="p-3 border-b bg-gray-50">
@@ -418,7 +668,8 @@ async function guardarReagendar() {
               <div className="divide-y max-h-[70vh] overflow-y-auto">
                 {Object.entries(areasProfesionales).map(([area, data]: any) => (
                   <div key={area}>
-                    <button onClick={() => setAreaExpandida(areaExpandida === area ? '' : area)} className="w-full flex items-center justify-between p-3 hover:bg-gray-50 text-left">
+                    <button onClick={() => setAreaExpandida(areaExpandida === area ? '' : area)}
+                      className="w-full flex items-center justify-between p-3 hover:bg-gray-50 text-left">
                       <span className="text-xs font-semibold text-gray-700">{data.emoji} {area}</span>
                       <span className="text-gray-400 text-xs">{areaExpandida === area ? '▲' : '▼'}</span>
                     </button>
@@ -439,6 +690,7 @@ async function guardarReagendar() {
             </div>
           </div>
 
+          {/* Contenido principal */}
           <div className="flex-1 overflow-x-auto">
             {!profSeleccionado ? (
               <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
@@ -451,7 +703,8 @@ async function guardarReagendar() {
                 <p className="text-sm font-medium text-gray-600">{profSeleccionado.nombre} no tiene horarios asignados</p>
                 <p className="text-xs text-gray-400 mt-1">Ve a Admin → Personal → Ver horarios para asignarlos</p>
               </div>
-            ) : (
+            ) : vistaActual === 'semana' ? (
+              /* ===== VISTA SEMANAL ===== */
               <div>
                 <div className="grid gap-1 min-w-[600px]" style={{ gridTemplateColumns: `56px repeat(6, 1fr)` }}>
                   <div />
@@ -469,58 +722,236 @@ async function guardarReagendar() {
                     );
                   })}
                   {todasHoras.map(hora => (
-                    <>
-                      <div key={`h-${hora}`} className="flex items-center justify-end pr-2">
+                    <React.Fragment key={`fila-${hora}`}>
+                      <div className="flex items-center justify-end pr-2">
                         <span className="text-[10px] text-gray-400 font-medium">{hora}</span>
                       </div>
                       {DIAS_SEMANA.map((dia, idx) => {
-                        const enHorario = estaEnHorario(hora, dia);
-                        const cita = citaEnHora(hora, idx);
-                        return (
-                          <div key={`${dia}-${hora}`}
-                            className={`h-12 rounded-lg mb-0.5 border transition-all ${cita ? `cursor-pointer ${cita.estado === 'confirmada' ? 'bg-emerald-100 border-emerald-400 hover:bg-emerald-200' : cita.estado === 'pendiente' ? 'bg-yellow-100 border-yellow-400 hover:bg-yellow-200' : 'bg-red-100 border-red-400 hover:bg-red-200'}` : enHorario ? 'bg-blue-50 border-blue-200 border-dashed hover:bg-blue-100 cursor-pointer' : 'border-transparent'}`}
-                            onClick={() => { if (cita) { setCitaSeleccionada(cita); setEditandoCita(false); } else if (enHorario) abrirModalNuevaCita(hora, idx); }}>
-                            {cita && (
-  <div className="p-1 h-full overflow-hidden">
-    <div className="flex items-center justify-between">
-      <p className="text-[10px] font-bold text-gray-700">{cita.hora?.slice(0,5)}</p>
-      <div className="flex items-center gap-0.5">
-        {cita.total_sesiones > 1 && (
-          <span className="text-[8px] font-bold px-1 rounded bg-blue-100 text-blue-700">
-            {cita.sesion}/{cita.total_sesiones}
-          </span>
-        )}
-        {cita.estado === 'confirmada' && (
-          <span className={`text-[8px] font-bold px-1 rounded ${
-            cita.asistio === true  ? 'bg-emerald-600 text-white' :
-            cita.asistio === false ? 'bg-red-500 text-white' :
-            'bg-gray-200 text-gray-500'
-          }`}>
-            {cita.asistio === true ? '✓' : cita.asistio === false ? '✗' : '?'}
-          </span>
-        )}
-      </div>
+  const enHorario = estaEnHorario(hora, dia);
+  const cita = getCitaEnSlot(hora, idx); // ← USA ESTA FUNCIÓN
+  const fecha = getFechaDia(idx);
+  const fechaStr = fecha.toISOString().split('T')[0];
+  const gerontoOcupado = horaOcupadaPorGeronto(fechaStr, hora);
+  const esGeronto = gerontoOcupado.ocupado;
+  
+  const slotMinutos = getSlotMinutosProfesional();
+  const esMultiSlot = cita && cita.duracion_min && cita.duracion_min > slotMinutos;
+  const esPrimerSlot = cita && cita.hora?.slice(0,5) === hora;
+  
+  const estilosBorde = getEstilosCelda(hora, idx);
+  
+  let colorFondo = '';
+  let colorBorde = '';
+  let cursor = '';
+  let onClickFn: any = undefined;
+  
+  if (cita) {
+    cursor = 'cursor-pointer';
+    if (cita.estado === 'confirmada') {
+      colorFondo = 'bg-emerald-100 hover:bg-emerald-200';
+      colorBorde = 'border-emerald-400';
+    } else if (cita.estado === 'pendiente') {
+      colorFondo = 'bg-yellow-100 hover:bg-yellow-200';
+      colorBorde = 'border-yellow-400';
+    } else {
+      colorFondo = 'bg-red-100 hover:bg-red-200';
+      colorBorde = 'border-red-400';
+    }
+    onClickFn = () => { setCitaSeleccionada(cita); setEditandoCita(false); };
+  } else if (esGeronto) {
+    colorFondo = 'bg-purple-100';
+    colorBorde = 'border-purple-300';
+    cursor = 'cursor-not-allowed';
+  } else if (enHorario) {
+    colorFondo = 'bg-blue-50 hover:bg-blue-100';
+    colorBorde = 'border-blue-200 border-dashed';
+    cursor = 'cursor-pointer';
+    onClickFn = () => abrirModalNuevaCita(hora, idx);
+  }
+  
+  return (
+    <div
+      key={`${dia}-${hora}`}
+      className={`h-12 border transition-all ${estilosBorde} ${colorFondo} ${colorBorde} ${cursor}`}
+      onClick={onClickFn}
+      style={esMultiSlot ? {
+        borderLeftWidth: '1px',
+        borderRightWidth: '1px',
+      } : {}}
+    >
+      {cita && (
+        <div className="p-1 h-full overflow-hidden">
+          {esPrimerSlot || !esMultiSlot ? (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold text-gray-700">{cita.hora?.slice(0,5)}</p>
+                <div className="flex items-center gap-0.5">
+                  {cita.total_sesiones > 1 && (
+                    <span className="text-[8px] font-bold px-1 rounded bg-blue-100 text-blue-700">
+                      {cita.sesion}/{cita.total_sesiones}
+                    </span>
+                  )}
+                  {cita.estado === 'confirmada' && (
+                    <span className={`text-[8px] font-bold px-1 rounded ${
+                      cita.asistio === true ? 'bg-emerald-600 text-white' : 
+                      cita.asistio === false ? 'bg-red-500 text-white' : 
+                      'bg-gray-200 text-gray-500'
+                    }`}>
+                      {cita.asistio === true ? '✓' : cita.asistio === false ? '✗' : '?'}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-800 truncate font-medium">{cita.paciente_nombre}</p>
+              <p className="text-[9px] text-gray-500 truncate">{cita.area_emoji} {cita.area_nombre}</p>
+              {cita.duracion_min && (
+                <p className="text-[7px] text-gray-400">⏱ {cita.duracion_min}min</p>
+              )}
+            </>
+          ) : (
+            <div className="h-full w-full" />
+          )}
+        </div>
+      )}
+      
+      {!cita && esGeronto && (
+        <div className="h-full flex flex-col items-center justify-center p-0.5 overflow-hidden min-h-0">
+          <div className="flex items-center gap-0.5">
+            <span className="text-[8px]">👴</span>
+            <span className="text-[7px] font-bold text-purple-700 uppercase tracking-tight">Geront.</span>
+          </div>
+          <p className="text-[7px] text-purple-600 text-center leading-tight px-0.5 w-full"
+            style={{
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              wordBreak: 'break-word',
+            }}
+            title={gerontoOcupado.detalle.replace('Gerontología - ', '')}
+          >
+            {gerontoOcupado.detalle.replace('Gerontología - ', '')}
+          </p>
+        </div>
+      )}
+      
+      {!cita && !esGeronto && enHorario && (
+        <div className="h-full flex items-center justify-center">
+          <span className="text-[9px] text-blue-400 font-medium">+ Nueva cita</span>
+        </div>
+      )}
     </div>
-    <p className="text-[10px] text-gray-800 truncate font-medium">{cita.paciente_nombre}</p>
-    <p className="text-[9px] text-gray-500 truncate">{cita.area_emoji} {cita.area_nombre}</p>
-  </div>
-)}
-                            {!cita && enHorario && <div className="h-full flex items-center justify-center"><span className="text-[9px] text-blue-400 font-medium">+ Nueva cita</span></div>}
-                          </div>
-                        );
-                      })}
-                    </>
+  );
+})}
+                    </React.Fragment>
                   ))}
                 </div>
                 <div className="flex gap-4 mt-3 text-[10px] text-gray-500 flex-wrap">
-  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-50 border border-blue-200 border-dashed inline-block"></span>Disponible</span>
-  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-400 inline-block"></span>Confirmada</span>
-  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-400 inline-block"></span>Pendiente</span>
-  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-100 border border-red-400 inline-block"></span>Cancelada</span>
-  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600 inline-block"></span>✓ Asistio</span>
-  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500 inline-block"></span>✗ No asistio</span>
-  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-200 inline-block"></span>? Sin marcar</span>
-</div>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-blue-50 border border-blue-200 border-dashed inline-block"></span>
+                    Disponible
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-purple-100 border border-purple-300 inline-block"></span>
+                    Gerontología
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-400 inline-block"></span>
+                    Confirmada
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-400 inline-block"></span>
+                    Pendiente
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-emerald-600 inline-block"></span>
+                    ✓ Asistio
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-red-500 inline-block"></span>
+                    ✗ No asistio
+                  </span>
+                </div>
+              </div>
+            ) : (
+              /* ===== VISTA MENSUAL ===== */
+              <div className="bg-white rounded-xl border overflow-hidden">
+                <div className="grid grid-cols-7 border-b">
+                  {['Lun','Mar','Mie','Jue','Vie','Sab','Dom'].map(d => (
+                    <div key={d} className="p-2 text-center text-[10px] font-semibold text-gray-500 uppercase bg-gray-50">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7">
+                  {getDiasMes().map((fecha, idx) => {
+                    if (!fecha) return <div key={`empty-${idx}`} className="min-h-[100px] border-b border-r border-gray-100 bg-gray-50/30" />;
+
+                    const esHoy = fecha.toDateString() === new Date().toDateString();
+                    const citasDia = citasDelDia(fecha);
+                    const trabajaHoy = profTrabajaDia(fecha);
+                    const esDomingo = fecha.getDay() === 0;
+
+                    return (
+                      <div key={fecha.toISOString()}
+                        className={`min-h-[100px] border-b border-r border-gray-100 p-1 transition-all ${esDomingo ? 'bg-gray-50/50' : trabajaHoy ? 'hover:bg-blue-50/30 cursor-pointer' : ''}`}
+                        onClick={() => trabajaHoy && !esDomingo && abrirModalNuevaCitaMes(fecha)}>
+
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${esHoy ? 'bg-emerald-600 text-white' : 'text-gray-700'}`}>
+                            {fecha.getDate()}
+                          </span>
+                          {trabajaHoy && !esDomingo && citasDia.length === 0 && (
+                            <span className="text-[8px] text-blue-400">+ cita</span>
+                          )}
+                        </div>
+
+                        <div className="space-y-0.5">
+                          {citasDia.slice(0, 3).map(cita => (
+                            <div key={cita.id}
+                              onClick={e => { e.stopPropagation(); setCitaSeleccionada(cita); setEditandoCita(false); }}
+                              className={`px-1 py-0.5 rounded text-[9px] cursor-pointer font-medium ${
+                                cita.estado === 'confirmada' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' :
+                                cita.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' :
+                                'bg-red-100 text-red-700'
+                              }`}
+                              style={{
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '100%'
+                              }}
+                            >
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
+                                cita.asistio === true ? 'bg-emerald-600' : 
+                                cita.asistio === false ? 'bg-red-500' : 
+                                'bg-gray-400'
+                              }`}></span>
+                              {cita.hora?.slice(0,5)} {cita.paciente_nombre}
+                              {cita.duracion_min && cita.duracion_min > 30 && (
+                                <span className="text-[7px] text-gray-400 ml-1">⏱{cita.duracion_min}min</span>
+                              )}
+                            </div>
+                          ))}
+                          {citasDia.length > 3 && (
+                            <div className="text-[9px] text-gray-500 text-center font-medium">
+                              +{citasDia.length - 3} más
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="p-3 border-t flex gap-4 text-[10px] text-gray-500 flex-wrap">
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-400 inline-block"></span>Confirmada</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-400 inline-block"></span>Pendiente</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>Asistio</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>No asistio</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-400 inline-block"></span>Sin marcar</span>
+                </div>
               </div>
             )}
           </div>
@@ -538,7 +969,6 @@ async function guardarReagendar() {
               </div>
               <button type="button" onClick={() => setModalNuevaCita(null)} className="text-gray-400 hover:text-gray-600 text-xl">x</button>
             </div>
-
             <div className="p-4 space-y-4">
               <div>
                 <div className="flex justify-between items-center mb-2">
@@ -548,23 +978,18 @@ async function guardarReagendar() {
                     {modoNuevoPaciente ? '← Buscar existente' : '+ Nuevo paciente'}
                   </button>
                 </div>
-
                 {modoNuevoPaciente ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <input type="text" placeholder="Nombre completo *" required value={formPaciente.nombre}
-                        onChange={e => setFormPaciente({ ...formPaciente, nombre: e.target.value })}
-                        className="border rounded-lg p-2 text-sm" />
+                        onChange={e => setFormPaciente({ ...formPaciente, nombre: e.target.value })} className="border rounded-lg p-2 text-sm" />
                       <input type="number" placeholder="Edad" value={formPaciente.edad}
-                        onChange={e => setFormPaciente({ ...formPaciente, edad: e.target.value })}
-                        className="border rounded-lg p-2 text-sm" />
+                        onChange={e => setFormPaciente({ ...formPaciente, edad: e.target.value })} className="border rounded-lg p-2 text-sm" />
                     </div>
                     <input type="text" placeholder="Telefono celular" value={formPaciente.telefono}
-                      onChange={e => setFormPaciente({ ...formPaciente, telefono: e.target.value })}
-                      className="w-full border rounded-lg p-2 text-sm" />
+                      onChange={e => setFormPaciente({ ...formPaciente, telefono: e.target.value })} className="w-full border rounded-lg p-2 text-sm" />
                     <input type="text" placeholder="Carnet de identidad" value={formPaciente.carnet}
-                      onChange={e => setFormPaciente({ ...formPaciente, carnet: e.target.value })}
-                      className="w-full border rounded-lg p-2 text-sm" />
+                      onChange={e => setFormPaciente({ ...formPaciente, carnet: e.target.value })} className="w-full border rounded-lg p-2 text-sm" />
                   </div>
                 ) : pacienteSeleccionado ? (
                   <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
@@ -593,7 +1018,6 @@ async function guardarReagendar() {
                   </div>
                 )}
               </div>
-
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-gray-50 border rounded-lg p-2">
                   <p className="text-[10px] text-gray-400">Area</p>
@@ -604,7 +1028,6 @@ async function guardarReagendar() {
                   <p className="text-sm font-medium text-gray-800">{profSeleccionado.nombre}</p>
                 </div>
               </div>
-
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Modalidad</label>
                 <select value={formCita.modalidad} onChange={e => setFormCita({ ...formCita, modalidad: e.target.value })} className="w-full border rounded-lg p-2 text-sm">
@@ -613,7 +1036,6 @@ async function guardarReagendar() {
                   <option value="domicilio">Domicilio</option>
                 </select>
               </div>
-
               {esAreaConServicios && serviciosDelArea.length > 0 && (
                 <div>
                   <label className="text-xs font-semibold text-gray-600 mb-1 block">Servicio (opcional)</label>
@@ -621,47 +1043,34 @@ async function guardarReagendar() {
                     onChange={e => {
                       const srv = serviciosDelArea.find(s => String(s.id) === e.target.value);
                       setFormCita({ ...formCita, servicio_id: e.target.value, servicio_nombre: srv?.nombre || '', monto_total: srv?.costo ? String(srv.costo) : formCita.monto_total });
-                    }}
-                    className="w-full border rounded-lg p-2 text-sm">
+                    }} className="w-full border rounded-lg p-2 text-sm">
                     <option value="">Sin servicio especifico</option>
-                    {serviciosDelArea.map(s => <option key={s.id} value={s.id}>{s.nombre} {s.costo ? `— Bs ${s.costo}` : ''}</option>)}
+                    {serviciosDelArea.map(s => <option key={s.id} value={s.id}>{s.nombre} {s.costo ? `— Bs ${s.costo}` : ''} {s.duracion_min ? `(${s.duracion_min}min)` : ''}</option>)}
                   </select>
                 </div>
               )}
-
               <div className="bg-gray-50 border rounded-lg p-3">
                 <p className="text-[10px] text-gray-400 mb-1">Sesion 1 — {formatFecha(modalNuevaCita.fecha)}</p>
                 <p className="text-[10px] text-gray-400 mb-2">Selecciona un horario disponible:</p>
                 <div className="flex gap-2 flex-wrap">
                   {horasProfParaDia(profSeleccionado.id, modalNuevaCita.fecha).map(h => {
-                    const ocupada = citas.some(c =>
-                      c.fecha.startsWith(modalNuevaCita.fecha) &&
-                      c.profesional_id === profSeleccionado.id &&
-                      c.hora?.slice(0,5) === h &&
-                      c.estado !== 'cancelada'
-                    );
-                    const seleccionada = modalNuevaCita.hora === h;
-                    return (
-                      <button key={h} type="button"
-                        disabled={ocupada}
-                        onClick={() => {
-                          if (ocupada) return;
-                          setModalNuevaCita({ ...modalNuevaCita, hora: h });
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
-                          ocupada
-                            ? 'bg-red-100 text-red-500 border-red-200 cursor-not-allowed line-through'
-                            : seleccionada
-                            ? 'bg-emerald-600 text-white border-emerald-600'
-                            : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'
-                        }`}>
-                        {h} {ocupada ? '· Ocupado' : ''}
-                      </button>
-                    );
-                  })}
+  // ✅ CORREGIDO: Usar isSlotDisponible
+  const fechaObj = new Date(modalNuevaCita.fecha + 'T00:00:00');
+  const diaSemana = DIAS_JS[fechaObj.getDay()];
+  const offsetDia = DIAS_SEMANA.indexOf(diaSemana);
+  const ocupadoSlot = !isSlotDisponible(h, offsetDia);
+  
+  const seleccionada = modalNuevaCita.hora === h;
+  return (
+    <button key={h} type="button" disabled={ocupadoSlot}
+      onClick={() => { if (!ocupadoSlot) setModalNuevaCita({ ...modalNuevaCita, hora: h }); }}
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${ocupadoSlot ? 'bg-red-100 text-red-500 border-red-200 cursor-not-allowed line-through' : seleccionada ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'}`}>
+      {h} {ocupadoSlot ? '· Ocupado' : ''}
+    </button>
+  );
+})}
                 </div>
               </div>
-
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-2 block">Estado de la cita</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -677,11 +1086,9 @@ async function guardarReagendar() {
                   </button>
                 </div>
               </div>
-
               {formCita.estado === 'confirmada' && (
                 <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 space-y-3">
                   <p className="text-xs font-semibold text-emerald-700">💰 Datos de pago y sesiones</p>
-
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[10px] text-gray-500">Precio total (Bs)</label>
@@ -700,14 +1107,10 @@ async function guardarReagendar() {
                             const nuevas = [...sesionesAdicionales];
                             for (let i = sesionesAdicionales.length; i < extras; i++) nuevas.push({ fecha: '', hora: '' });
                             setSesionesAdicionales(nuevas);
-                          } else {
-                            setSesionesAdicionales(sesionesAdicionales.slice(0, extras));
-                          }
-                        }}
-                        className="w-full border rounded-lg p-2 text-sm bg-white mt-0.5" />
+                          } else setSesionesAdicionales(sesionesAdicionales.slice(0, extras));
+                        }} className="w-full border rounded-lg p-2 text-sm bg-white mt-0.5" />
                     </div>
                   </div>
-
                   <div>
                     <label className="text-[10px] text-gray-500">Monto pagado (Bs)</label>
                     <input type="number" placeholder="0" value={formCita.monto_pagado}
@@ -719,12 +1122,10 @@ async function guardarReagendar() {
                       </div>
                     )}
                   </div>
-
                   <div>
                     <label className="text-[10px] text-gray-500 mb-1 block">Metodo de pago</label>
                     <MetodoPagoSelector value={formCita.metodo_pago} onChange={v => setFormCita({ ...formCita, metodo_pago: v })} />
                   </div>
-
                   {sesionesAdicionales.length > 0 && (
                     <div className="space-y-2 border-t pt-3">
                       <p className="text-[10px] text-gray-500 font-semibold">📅 Programacion de sesiones adicionales</p>
@@ -736,11 +1137,7 @@ async function guardarReagendar() {
                             <div>
                               <label className="text-[10px] text-gray-400">Fecha</label>
                               <input type="date" required value={s.fecha}
-                                onChange={e => {
-                                  const nuevas = [...sesionesAdicionales];
-                                  nuevas[idx] = { fecha: e.target.value, hora: '' };
-                                  setSesionesAdicionales(nuevas);
-                                }}
+                                onChange={e => { const nuevas = [...sesionesAdicionales]; nuevas[idx] = { fecha: e.target.value, hora: '' }; setSesionesAdicionales(nuevas); }}
                                 className="w-full border rounded-lg p-1.5 text-xs mt-0.5" />
                             </div>
                             {s.fecha && (
@@ -751,28 +1148,11 @@ async function guardarReagendar() {
                                 ) : (
                                   <div className="flex flex-wrap gap-1">
                                     {horasDisponibles.map(h => {
-                                      const ocupada = citas.some(c =>
-                                        c.fecha.startsWith(s.fecha) &&
-                                        c.profesional_id === profSeleccionado.id &&
-                                        c.hora?.slice(0,5) === h &&
-                                        c.estado !== 'cancelada'
-                                      );
+                                      const ocupada = citas.some(c => c.fecha.startsWith(s.fecha) && c.profesional_id === profSeleccionado.id && c.hora?.slice(0,5) === h && c.estado !== 'cancelada');
                                       return (
-                                        <button key={h} type="button"
-                                          disabled={ocupada}
-                                          onClick={() => {
-                                            if (ocupada) return;
-                                            const nuevas = [...sesionesAdicionales];
-                                            nuevas[idx] = { ...nuevas[idx], hora: h };
-                                            setSesionesAdicionales(nuevas);
-                                          }}
-                                          className={`px-2 py-1 rounded-lg text-xs font-medium border ${
-                                            ocupada
-                                              ? 'bg-red-100 text-red-400 border-red-200 cursor-not-allowed line-through'
-                                              : s.hora === h
-                                              ? 'bg-emerald-600 text-white border-emerald-600'
-                                              : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'
-                                          }`}>
+                                        <button key={h} type="button" disabled={ocupada}
+                                          onClick={() => { if (!ocupada) { const nuevas = [...sesionesAdicionales]; nuevas[idx] = { ...nuevas[idx], hora: h }; setSesionesAdicionales(nuevas); } }}
+                                          className={`px-2 py-1 rounded-lg text-xs font-medium border ${ocupada ? 'bg-red-100 text-red-400 border-red-200 cursor-not-allowed line-through' : s.hora === h ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'}`}>
                                           {h} {ocupada ? '· Ocupado' : ''}
                                         </button>
                                       );
@@ -788,14 +1168,12 @@ async function guardarReagendar() {
                   )}
                 </div>
               )}
-
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Notas (opcional)</label>
                 <textarea value={formCita.notas} onChange={e => setFormCita({ ...formCita, notas: e.target.value })}
                   className="w-full border rounded-lg p-2 text-sm" rows={2} placeholder="Observaciones, indicaciones..." />
               </div>
             </div>
-
             <div className="p-4 border-t flex gap-2 sticky bottom-0 bg-white">
               <button type="button" onClick={() => setModalNuevaCita(null)} className="flex-1 border rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
               <button type="submit" disabled={guardandoCita || (!pacienteSeleccionado && !modoNuevoPaciente)}
@@ -819,62 +1197,39 @@ async function guardarReagendar() {
               <div className="flex items-center gap-2">
                 {!editandoCita && (
                   <button onClick={() => {
-                    setEditandoCita(true);
-                    setSesionesAdicionalesEditar([]);
+                    setEditandoCita(true); setSesionesAdicionalesEditar([]);
                     setFormEditar({
-                      nombre: citaSeleccionada.paciente_nombre || '',
-                      telefono: citaSeleccionada.paciente_telefono || '',
-                      carnet: citaSeleccionada.paciente_carnet || '',
-                      edad: citaSeleccionada.paciente_edad || '',
-                      estado: citaSeleccionada.estado,
-                      modalidad: citaSeleccionada.modalidad || 'presencial',
-                      monto_total: citaSeleccionada.monto_total || '',
-                      monto_pagado: citaSeleccionada.monto_pagado || '',
-                      metodo_pago: citaSeleccionada.metodo_pago || 'efectivo',
-                      notas: citaSeleccionada.notas || '',
-                      total_sesiones: citaSeleccionada.total_sesiones || 1,
-                      servicio_nombre: citaSeleccionada.servicio_nombre || '',
+                      nombre: citaSeleccionada.paciente_nombre || '', telefono: citaSeleccionada.paciente_telefono || '',
+                      carnet: citaSeleccionada.paciente_carnet || '', edad: citaSeleccionada.paciente_edad || '',
+                      estado: citaSeleccionada.estado, modalidad: citaSeleccionada.modalidad || 'presencial',
+                      monto_total: citaSeleccionada.monto_total || '', monto_pagado: citaSeleccionada.monto_pagado || '',
+                      metodo_pago: citaSeleccionada.metodo_pago || 'efectivo', notas: citaSeleccionada.notas || '',
+                      total_sesiones: citaSeleccionada.total_sesiones || 1, servicio_nombre: citaSeleccionada.servicio_nombre || '',
                     });
                   }} className="text-xs text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-2 py-1 rounded-lg">Editar</button>
                 )}
                 <button onClick={() => { setCitaSeleccionada(null); setEditandoCita(false); }} className="text-gray-400 hover:text-gray-600 text-xl">x</button>
               </div>
             </div>
-
             <div className="p-4">
               {!editandoCita ? (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="bg-gray-50 rounded-lg p-2">
-                      <p className="text-[10px] text-gray-400">Area</p>
-                      <p className="font-medium text-gray-800">{citaSeleccionada.area_emoji} {citaSeleccionada.area_nombre}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-2">
-                      <p className="text-[10px] text-gray-400">Profesional</p>
-                      <p className="font-medium text-gray-800">{citaSeleccionada.profesional_nombre}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-2">
-                      <p className="text-[10px] text-gray-400">Modalidad</p>
-                      <p className="font-medium text-gray-800 capitalize">{citaSeleccionada.modalidad}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-2">
-                      <p className="text-[10px] text-gray-400">Sesion</p>
-                      <p className="font-medium text-gray-800">{citaSeleccionada.sesion} / {citaSeleccionada.total_sesiones || 1}</p>
-                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2"><p className="text-[10px] text-gray-400">Area</p><p className="font-medium text-gray-800">{citaSeleccionada.area_emoji} {citaSeleccionada.area_nombre}</p></div>
+                    <div className="bg-gray-50 rounded-lg p-2"><p className="text-[10px] text-gray-400">Profesional</p><p className="font-medium text-gray-800">{citaSeleccionada.profesional_nombre}</p></div>
+                    <div className="bg-gray-50 rounded-lg p-2"><p className="text-[10px] text-gray-400">Modalidad</p><p className="font-medium text-gray-800 capitalize">{citaSeleccionada.modalidad}</p></div>
+                    <div className="bg-gray-50 rounded-lg p-2"><p className="text-[10px] text-gray-400">Sesion</p><p className="font-medium text-gray-800">{citaSeleccionada.sesion} / {citaSeleccionada.total_sesiones || 1}</p></div>
+                    {citaSeleccionada.duracion_min && (
+                      <div className="bg-gray-50 rounded-lg p-2"><p className="text-[10px] text-gray-400">Duración</p><p className="font-medium text-gray-800">{citaSeleccionada.duracion_min} min</p></div>
+                    )}
                     <div className="bg-gray-50 rounded-lg p-2">
                       <p className="text-[10px] text-gray-400">Estado</p>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${citaSeleccionada.estado === 'confirmada' ? 'bg-emerald-100 text-emerald-700' : citaSeleccionada.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                        {citaSeleccionada.estado}
-                      </span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${citaSeleccionada.estado === 'confirmada' ? 'bg-emerald-100 text-emerald-700' : citaSeleccionada.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{citaSeleccionada.estado}</span>
                     </div>
                     {citaSeleccionada.paciente_telefono && (
-                      <div className="bg-gray-50 rounded-lg p-2">
-                        <p className="text-[10px] text-gray-400">Telefono</p>
-                        <p className="font-medium text-gray-800">{citaSeleccionada.paciente_telefono}</p>
-                      </div>
+                      <div className="bg-gray-50 rounded-lg p-2"><p className="text-[10px] text-gray-400">Telefono</p><p className="font-medium text-gray-800">{citaSeleccionada.paciente_telefono}</p></div>
                     )}
                   </div>
-
                   {citaSeleccionada.estado === 'confirmada' && (
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
                       <p className="text-xs font-semibold text-emerald-700 mb-2">💰 Pago</p>
@@ -886,91 +1241,63 @@ async function guardarReagendar() {
                       {citaSeleccionada.metodo_pago && <p className="text-[10px] text-gray-400 mt-2">Metodo: <span className="font-medium text-gray-600 capitalize">{citaSeleccionada.metodo_pago}</span></p>}
                     </div>
                   )}
-
                   {citaSeleccionada.estado === 'pendiente' && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
                       <p className="text-xs text-yellow-700 font-medium">🕐 Reserva pendiente de confirmacion</p>
                       <p className="text-[10px] text-yellow-600 mt-0.5">Presiona "Editar" para confirmar el pago</p>
                     </div>
                   )}
-
                   {citaSeleccionada.notas && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-[10px] text-gray-400 mb-1">Notas</p>
-                      <p className="text-xs text-gray-700">{citaSeleccionada.notas}</p>
+                    <div className="bg-gray-50 rounded-lg p-3"><p className="text-[10px] text-gray-400 mb-1">Notas</p><p className="text-xs text-gray-700">{citaSeleccionada.notas}</p></div>
+                  )}
+                  {citaSeleccionada.estado === 'confirmada' && (
+                    <div className="pt-2 border-t space-y-2">
+                      <p className="text-xs text-gray-500 mb-2">Marcar asistencia:</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => marcarAsistencia(citaSeleccionada.id, true)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium ${citaSeleccionada.asistio === true ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>✓ Asistio</button>
+                        <button onClick={() => marcarAsistencia(citaSeleccionada.id, false)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium ${citaSeleccionada.asistio === false ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>x No asistio</button>
+                        <button onClick={() => { setReagendando(!reagendando); setFormReagendar({ fecha: '', hora: '' }); }}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium ${reagendando ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}>📅 Reagendar</button>
+                      </div>
+                      {reagendando && (
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 space-y-3">
+                          <p className="text-xs font-semibold text-blue-700">Selecciona nueva fecha y hora</p>
+                          <div>
+                            <label className="text-[10px] text-gray-500">Fecha</label>
+                            <input type="date" value={formReagendar.fecha} onChange={e => setFormReagendar({ fecha: e.target.value, hora: '' })} className="w-full border rounded-lg p-2 text-sm mt-0.5" />
+                          </div>
+                          {formReagendar.fecha && (
+                            <div>
+                              <label className="text-[10px] text-gray-500 mb-1 block">Horario disponible</label>
+                              {horasProfParaDia(citaSeleccionada.profesional_id, formReagendar.fecha).length === 0 ? (
+                                <p className="text-[10px] text-red-400 bg-red-50 p-2 rounded-lg">El profesional no trabaja este dia</p>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {horasProfParaDia(citaSeleccionada.profesional_id, formReagendar.fecha).map(h => {
+                                    const ocupada = citas.some(c => c.fecha.startsWith(formReagendar.fecha) && c.profesional_id === citaSeleccionada.profesional_id && c.hora?.slice(0,5) === h && c.estado !== 'cancelada' && c.id !== citaSeleccionada.id);
+                                    return (
+                                      <button key={h} type="button" disabled={ocupada}
+                                        onClick={() => { if (!ocupada) setFormReagendar({ ...formReagendar, hora: h }); }}
+                                        className={`px-2 py-1 rounded-lg text-xs font-medium border ${ocupada ? 'bg-red-100 text-red-400 border-red-200 cursor-not-allowed line-through' : formReagendar.hora === h ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
+                                        {h} {ocupada ? '· Ocupado' : ''}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {formReagendar.fecha && formReagendar.hora && (
+                            <button onClick={guardarReagendar} className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
+                              Confirmar reagenda → {formReagendar.hora} del {formatFecha(formReagendar.fecha)}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
-
-                  {citaSeleccionada.estado === 'confirmada' && (
-  <div className="pt-2 border-t space-y-2">
-    <p className="text-xs text-gray-500 mb-2">Marcar asistencia:</p>
-    <div className="flex gap-2">
-      <button onClick={() => marcarAsistencia(citaSeleccionada.id, true)}
-        className={`flex-1 py-2 rounded-lg text-xs font-medium ${citaSeleccionada.asistio === true ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>
-        ✓ Asistio
-      </button>
-      <button onClick={() => marcarAsistencia(citaSeleccionada.id, false)}
-        className={`flex-1 py-2 rounded-lg text-xs font-medium ${citaSeleccionada.asistio === false ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
-        x No asistio
-      </button>
-      <button
-        onClick={() => { setReagendando(!reagendando); setFormReagendar({ fecha: '', hora: '' }); }}
-        className={`flex-1 py-2 rounded-lg text-xs font-medium ${reagendando ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}>
-        📅 Reagendar
-      </button>
-    </div>
-
-    {reagendando && (
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 space-y-3">
-        <p className="text-xs font-semibold text-blue-700">Selecciona nueva fecha y hora</p>
-        <div>
-          <label className="text-[10px] text-gray-500">Fecha</label>
-          <input type="date" value={formReagendar.fecha}
-            onChange={e => setFormReagendar({ fecha: e.target.value, hora: '' })}
-            className="w-full border rounded-lg p-2 text-sm mt-0.5" />
-        </div>
-        {formReagendar.fecha && (
-          <div>
-            <label className="text-[10px] text-gray-500 mb-1 block">Horario disponible</label>
-            {horasProfParaDia(citaSeleccionada.profesional_id, formReagendar.fecha).length === 0 ? (
-              <p className="text-[10px] text-red-400 bg-red-50 p-2 rounded-lg">El profesional no trabaja este dia</p>
-            ) : (
-              <div className="flex flex-wrap gap-1">
-                {horasProfParaDia(citaSeleccionada.profesional_id, formReagendar.fecha).map(h => {
-                  const ocupada = citas.some(c =>
-                    c.fecha.startsWith(formReagendar.fecha) &&
-                    c.profesional_id === citaSeleccionada.profesional_id &&
-                    c.hora?.slice(0,5) === h &&
-                    c.estado !== 'cancelada' &&
-                    c.id !== citaSeleccionada.id
-                  );
-                  return (
-                    <button key={h} type="button"
-                      disabled={ocupada}
-                      onClick={() => { if (!ocupada) setFormReagendar({ ...formReagendar, hora: h }); }}
-                      className={`px-2 py-1 rounded-lg text-xs font-medium border ${
-                        ocupada ? 'bg-red-100 text-red-400 border-red-200 cursor-not-allowed line-through'
-                        : formReagendar.hora === h ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
-                      }`}>
-                      {h} {ocupada ? '· Ocupado' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-        {formReagendar.fecha && formReagendar.hora && (
-          <button onClick={guardarReagendar}
-            className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
-            Confirmar reagenda → {formReagendar.hora} del {formatFecha(formReagendar.fecha)}
-          </button>
-        )}
-      </div>
-    )}
-  </div>
-)}
                 </div>
               ) : (
                 <form onSubmit={guardarEdicionCita} className="space-y-4">
@@ -978,52 +1305,28 @@ async function guardarReagendar() {
                     <p className="text-xs font-semibold text-gray-600 mb-2">Datos del paciente</p>
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-2">
-                        <input type="text" placeholder="Nombre completo" value={formEditar.nombre}
-                          onChange={e => setFormEditar({ ...formEditar, nombre: e.target.value })}
-                          className="border rounded-lg p-2 text-sm" />
-                        <input type="number" placeholder="Edad" value={formEditar.edad}
-                          onChange={e => setFormEditar({ ...formEditar, edad: e.target.value })}
-                          className="border rounded-lg p-2 text-sm" />
+                        <input type="text" placeholder="Nombre completo" value={formEditar.nombre} onChange={e => setFormEditar({ ...formEditar, nombre: e.target.value })} className="border rounded-lg p-2 text-sm" />
+                        <input type="number" placeholder="Edad" value={formEditar.edad} onChange={e => setFormEditar({ ...formEditar, edad: e.target.value })} className="border rounded-lg p-2 text-sm" />
                       </div>
-                      <input type="text" placeholder="Telefono" value={formEditar.telefono}
-                        onChange={e => setFormEditar({ ...formEditar, telefono: e.target.value })}
-                        className="w-full border rounded-lg p-2 text-sm" />
-                      <input type="text" placeholder="Carnet de identidad" value={formEditar.carnet}
-                        onChange={e => setFormEditar({ ...formEditar, carnet: e.target.value })}
-                        className="w-full border rounded-lg p-2 text-sm" />
+                      <input type="text" placeholder="Telefono" value={formEditar.telefono} onChange={e => setFormEditar({ ...formEditar, telefono: e.target.value })} className="w-full border rounded-lg p-2 text-sm" />
+                      <input type="text" placeholder="Carnet de identidad" value={formEditar.carnet} onChange={e => setFormEditar({ ...formEditar, carnet: e.target.value })} className="w-full border rounded-lg p-2 text-sm" />
                     </div>
                   </div>
-
                   <div className="grid grid-cols-2 gap-2">
-  <div className="bg-gray-50 border rounded-lg p-2">
-    <p className="text-[10px] text-gray-400">Area</p>
-    <p className="text-sm font-medium text-gray-800">{citaSeleccionada.area_emoji} {citaSeleccionada.area_nombre}</p>
-  </div>
-  <div className="bg-gray-50 border rounded-lg p-2">
-    <p className="text-[10px] text-gray-400">Profesional</p>
-    <p className="text-sm font-medium text-gray-800">{citaSeleccionada.profesional_nombre}</p>
-  </div>
-</div>
-
-{/* Servicio editable */}
-{servicios.filter(s => s.area_id === citaSeleccionada.area_id && !['zumba','gerontologia'].includes(citaSeleccionada.area_nombre?.toLowerCase())).length > 0 && (
-  <div>
-    <label className="text-xs font-semibold text-gray-600 mb-1 block">Servicio</label>
-    <select
-      value={formEditar.servicio_nombre || ''}
-      onChange={e => setFormEditar({ ...formEditar, servicio_nombre: e.target.value })}
-      className="w-full border rounded-lg p-2 text-sm"
-    >
-      <option value="">Sin servicio especifico</option>
-      {servicios.filter(s => s.area_id === citaSeleccionada.area_id).map(s => (
-        <option key={s.id} value={s.nombre}>
-          {s.nombre} {s.costo ? `— Bs ${s.costo}` : ''}
-        </option>
-      ))}
-    </select>
-  </div>
-)}
-
+                    <div className="bg-gray-50 border rounded-lg p-2"><p className="text-[10px] text-gray-400">Area</p><p className="text-sm font-medium text-gray-800">{citaSeleccionada.area_emoji} {citaSeleccionada.area_nombre}</p></div>
+                    <div className="bg-gray-50 border rounded-lg p-2"><p className="text-[10px] text-gray-400">Profesional</p><p className="text-sm font-medium text-gray-800">{citaSeleccionada.profesional_nombre}</p></div>
+                  </div>
+                  {servicios.filter(s => s.area_id === citaSeleccionada.area_id && !['zumba','gerontologia'].includes(citaSeleccionada.area_nombre?.toLowerCase())).length > 0 && (
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Servicio</label>
+                      <select value={formEditar.servicio_nombre || ''} onChange={e => setFormEditar({ ...formEditar, servicio_nombre: e.target.value })} className="w-full border rounded-lg p-2 text-sm">
+                        <option value="">Sin servicio especifico</option>
+                        {servicios.filter(s => s.area_id === citaSeleccionada.area_id).map(s => (
+                          <option key={s.id} value={s.nombre}>{s.nombre} {s.costo ? `— Bs ${s.costo}` : ''} {s.duracion_min ? `(${s.duracion_min}min)` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <label className="text-xs font-semibold text-gray-600 mb-1 block">Modalidad</label>
                     <select value={formEditar.modalidad} onChange={e => setFormEditar({ ...formEditar, modalidad: e.target.value })} className="w-full border rounded-lg p-2 text-sm">
@@ -1032,43 +1335,29 @@ async function guardarReagendar() {
                       <option value="domicilio">Domicilio</option>
                     </select>
                   </div>
-
                   <div>
                     <label className="text-xs font-semibold text-gray-600 mb-2 block">Estado</label>
                     <div className="grid grid-cols-2 gap-2">
-                      <button type="button" onClick={() => setFormEditar({ ...formEditar, estado: 'pendiente' })}
-                        className={`p-2.5 rounded-xl border-2 text-left ${formEditar.estado === 'pendiente' ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200'}`}>
-                        <p className="text-xs font-bold text-gray-700">🕐 Reserva</p>
-                      </button>
-                      <button type="button" onClick={() => setFormEditar({ ...formEditar, estado: 'confirmada' })}
-                        className={`p-2.5 rounded-xl border-2 text-left ${formEditar.estado === 'confirmada' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200'}`}>
-                        <p className="text-xs font-bold text-gray-700">✓ Confirmada</p>
-                      </button>
+                      <button type="button" onClick={() => setFormEditar({ ...formEditar, estado: 'pendiente' })} className={`p-2.5 rounded-xl border-2 text-left ${formEditar.estado === 'pendiente' ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200'}`}><p className="text-xs font-bold text-gray-700">🕐 Reserva</p></button>
+                      <button type="button" onClick={() => setFormEditar({ ...formEditar, estado: 'confirmada' })} className={`p-2.5 rounded-xl border-2 text-left ${formEditar.estado === 'confirmada' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200'}`}><p className="text-xs font-bold text-gray-700">✓ Confirmada</p></button>
                     </div>
                   </div>
-
                   {formEditar.estado === 'confirmada' && (
                     <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 space-y-3">
                       <p className="text-xs font-semibold text-emerald-700">💰 Datos de pago</p>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-[10px] text-gray-500">Precio total (Bs)</label>
-                          <input type="number" value={formEditar.monto_total}
-                            onChange={e => setFormEditar({ ...formEditar, monto_total: e.target.value })}
-                            className="w-full border rounded-lg p-2 text-sm bg-white mt-0.5" />
+                          <input type="number" value={formEditar.monto_total} onChange={e => setFormEditar({ ...formEditar, monto_total: e.target.value })} className="w-full border rounded-lg p-2 text-sm bg-white mt-0.5" />
                         </div>
                         <div>
                           <label className="text-[10px] text-gray-500">Cantidad sesiones</label>
-                          <input type="number" min="1" value={formEditar.total_sesiones}
-                            onChange={e => setFormEditar({ ...formEditar, total_sesiones: Number(e.target.value) })}
-                            className="w-full border rounded-lg p-2 text-sm bg-white mt-0.5" />
+                          <input type="number" min="1" value={formEditar.total_sesiones} onChange={e => setFormEditar({ ...formEditar, total_sesiones: Number(e.target.value) })} className="w-full border rounded-lg p-2 text-sm bg-white mt-0.5" />
                         </div>
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-500">Monto pagado (Bs)</label>
-                        <input type="number" value={formEditar.monto_pagado}
-                          onChange={e => setFormEditar({ ...formEditar, monto_pagado: e.target.value })}
-                          className="w-full border rounded-lg p-2 text-sm bg-white mt-0.5" />
+                        <input type="number" value={formEditar.monto_pagado} onChange={e => setFormEditar({ ...formEditar, monto_pagado: e.target.value })} className="w-full border rounded-lg p-2 text-sm bg-white mt-0.5" />
                         {formEditar.monto_total && formEditar.monto_pagado && (
                           <div className={`text-xs font-medium px-2 py-1 rounded-lg mt-1 ${Number(formEditar.monto_pagado) >= Number(formEditar.monto_total) ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'}`}>
                             {Number(formEditar.monto_pagado) >= Number(formEditar.monto_total) ? '✓ Pago completo' : `Pendiente: Bs ${Number(formEditar.monto_total) - Number(formEditar.monto_pagado)}`}
@@ -1078,107 +1367,67 @@ async function guardarReagendar() {
                       <div>
                         <label className="text-[10px] text-gray-500 mb-1 block">Metodo de pago</label>
                         <MetodoPagoSelector value={formEditar.metodo_pago} onChange={v => setFormEditar({ ...formEditar, metodo_pago: v })} />
-                      {/* Sesiones adicionales */}
-{formEditar.total_sesiones > (citaSeleccionada.total_sesiones || 1) && (
-  <div className="space-y-2 border-t pt-3">
-    <p className="text-[10px] text-gray-500 font-semibold">📅 Programar sesiones nuevas</p>
-    {Array.from({ length: formEditar.total_sesiones - (citaSeleccionada.total_sesiones || 1) }, (_, idx) => {
-      const s = sesionesAdicionalesEditar[idx] || { fecha: '', hora: '' };
-      const horasDisponibles = s.fecha ? horasProfParaDia(citaSeleccionada.profesional_id, s.fecha) : [];
-      return (
-        <div key={idx} className="p-2 bg-white rounded-lg border space-y-2">
-          <p className="text-[10px] font-bold text-blue-600">
-            Sesion {(citaSeleccionada.total_sesiones || 1) + idx + 1}
-          </p>
-          <div>
-            <label className="text-[10px] text-gray-400">Fecha</label>
-            <input type="date" required value={s.fecha}
-              onChange={e => {
-                const nuevas = [...sesionesAdicionalesEditar];
-                while (nuevas.length <= idx) nuevas.push({ fecha: '', hora: '' });
-                nuevas[idx] = { fecha: e.target.value, hora: '' };
-                setSesionesAdicionalesEditar(nuevas);
-              }}
-              className="w-full border rounded-lg p-1.5 text-xs mt-0.5" />
-          </div>
-          {s.fecha && (
-            <div>
-              <label className="text-[10px] text-gray-400 mb-1 block">Horario disponible</label>
-              {horasDisponibles.length === 0 ? (
-                <p className="text-[10px] text-red-400 bg-red-50 p-2 rounded-lg">El profesional no trabaja este dia</p>
-              ) : (
-                <div className="flex flex-wrap gap-1">
-                  {horasDisponibles.map(h => {
-                    const ocupada = citas.some(c =>
-                      c.fecha.startsWith(s.fecha) &&
-                      c.profesional_id === citaSeleccionada.profesional_id &&
-                      c.hora?.slice(0,5) === h &&
-                      c.estado !== 'cancelada'
-                    );
-                    return (
-                      <button key={h} type="button"
-                        disabled={ocupada}
-                        onClick={() => {
-                          if (ocupada) return;
-                          const nuevas = [...sesionesAdicionalesEditar];
-                          while (nuevas.length <= idx) nuevas.push({ fecha: '', hora: '' });
-                          nuevas[idx] = { ...nuevas[idx], hora: h };
-                          setSesionesAdicionalesEditar(nuevas);
-                        }}
-                        className={`px-2 py-1 rounded-lg text-xs font-medium border ${
-                          ocupada ? 'bg-red-100 text-red-400 border-red-200 cursor-not-allowed line-through'
-                          : s.hora === h ? 'bg-emerald-600 text-white border-emerald-600'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'
-                        }`}>
-                        {h} {ocupada ? '· Ocupado' : ''}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    })}
-  </div>
-)}
                       </div>
+                      {formEditar.total_sesiones > (citaSeleccionada.total_sesiones || 1) && (
+                        <div className="space-y-2 border-t pt-3">
+                          <p className="text-[10px] text-gray-500 font-semibold">📅 Programar sesiones nuevas</p>
+                          {Array.from({ length: formEditar.total_sesiones - (citaSeleccionada.total_sesiones || 1) }, (_, idx) => {
+                            const s = sesionesAdicionalesEditar[idx] || { fecha: '', hora: '' };
+                            const horasDisponibles = s.fecha ? horasProfParaDia(citaSeleccionada.profesional_id, s.fecha) : [];
+                            return (
+                              <div key={idx} className="p-2 bg-white rounded-lg border space-y-2">
+                                <p className="text-[10px] font-bold text-blue-600">Sesion {(citaSeleccionada.total_sesiones || 1) + idx + 1}</p>
+                                <div>
+                                  <label className="text-[10px] text-gray-400">Fecha</label>
+                                  <input type="date" required value={s.fecha}
+                                    onChange={e => { const nuevas = [...sesionesAdicionalesEditar]; while (nuevas.length <= idx) nuevas.push({ fecha: '', hora: '' }); nuevas[idx] = { fecha: e.target.value, hora: '' }; setSesionesAdicionalesEditar(nuevas); }}
+                                    className="w-full border rounded-lg p-1.5 text-xs mt-0.5" />
+                                </div>
+                                {s.fecha && (
+                                  <div>
+                                    <label className="text-[10px] text-gray-400 mb-1 block">Horario disponible</label>
+                                    {horasDisponibles.length === 0 ? (
+                                      <p className="text-[10px] text-red-400 bg-red-50 p-2 rounded-lg">El profesional no trabaja este dia</p>
+                                    ) : (
+                                      <div className="flex flex-wrap gap-1">
+                                        {horasDisponibles.map(h => {
+                                          const ocupada = citas.some(c => c.fecha.startsWith(s.fecha) && c.profesional_id === citaSeleccionada.profesional_id && c.hora?.slice(0,5) === h && c.estado !== 'cancelada');
+                                          return (
+                                            <button key={h} type="button" disabled={ocupada}
+                                              onClick={() => { if (!ocupada) { const nuevas = [...sesionesAdicionalesEditar]; while (nuevas.length <= idx) nuevas.push({ fecha: '', hora: '' }); nuevas[idx] = { ...nuevas[idx], hora: h }; setSesionesAdicionalesEditar(nuevas); } }}
+                                              className={`px-2 py-1 rounded-lg text-xs font-medium border ${ocupada ? 'bg-red-100 text-red-400 border-red-200 cursor-not-allowed line-through' : s.hora === h ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'}`}>
+                                              {h} {ocupada ? '· Ocupado' : ''}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
-
                   <div>
                     <label className="text-[10px] text-gray-500">Notas</label>
-                    <textarea value={formEditar.notas} onChange={e => setFormEditar({ ...formEditar, notas: e.target.value })}
-                      className="w-full border rounded-lg p-2 text-sm mt-0.5" rows={2} placeholder="Observaciones..." />
+                    <textarea value={formEditar.notas} onChange={e => setFormEditar({ ...formEditar, notas: e.target.value })} className="w-full border rounded-lg p-2 text-sm mt-0.5" rows={2} placeholder="Observaciones..." />
                   </div>
-
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setEditandoCita(false)} className="flex-1 border rounded-lg py-2 text-sm text-gray-600">Cancelar</button>
-                    <button type="submit" disabled={guardandoCita} className="flex-1 bg-emerald-600 text-white rounded-lg py-2 text-sm hover:bg-emerald-700 disabled:opacity-50">
-                      {guardandoCita ? 'Guardando...' : 'Guardar cambios'}
-                    </button>
+                    <button type="submit" disabled={guardandoCita} className="flex-1 bg-emerald-600 text-white rounded-lg py-2 text-sm hover:bg-emerald-700 disabled:opacity-50">{guardandoCita ? 'Guardando...' : 'Guardar cambios'}</button>
                   </div>
                 </form>
               )}
             </div>
-
             {!editandoCita && (
-  <div className="p-4 border-t space-y-2">
-    <button
-      onClick={() => eliminarCita(citaSeleccionada.id)}
-      className="w-full py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-medium border border-red-200"
-    >
-      🗑 Eliminar cita
-    </button>
-    <button
-      onClick={() => { setCitaSeleccionada(null); setEditandoCita(false); }}
-      className="w-full border rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50"
-    >
-      Cerrar
-    </button>
-  </div>
-)}
+              <div className="p-4 border-t space-y-2">
+                <button onClick={() => eliminarCita(citaSeleccionada.id)} className="w-full py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-medium border border-red-200">🗑 Eliminar cita</button>
+                <button onClick={() => { setCitaSeleccionada(null); setEditandoCita(false); }} className="w-full border rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50">Cerrar</button>
+              </div>
+            )}
           </div>
         </div>
       )}

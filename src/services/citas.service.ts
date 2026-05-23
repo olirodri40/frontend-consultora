@@ -13,24 +13,20 @@ export async function getCitas(filtros?: {
   return response.data.citas;
 }
 
-export async function actualizarCitaService(
-  id: number,
-  datos: any
-) {
+export async function actualizarCitaService(id: number, datos: any) {
   await api.put(`/citas/${id}`, datos);
 }
+
 export async function crearCita(datos: any) {
   const response = await api.post('/citas', datos);
   return response.data;
 }
+
 export async function crearMultiplesCitas(sesiones: any[]) {
-  const resultados = [];
-  for (const sesion of sesiones) {
-    const response = await api.post('/citas', sesion);
-    resultados.push(response.data);
-  }
-  return resultados;
+  const response = await api.post('/citas/multiples', sesiones);
+  return response.data;
 }
+
 export async function eliminarCitaService(id: number) {
   await api.delete(`/citas/${id}`);
 }

@@ -57,13 +57,21 @@ export default function Admin() {
 const [modalHorariosProfesional, setModalHorariosProfesional] = useState<any>(null);
 const [horariosProfesional, setHorariosProfesional] = useState<any[]>([]);
 const [cargandoHorarios, setCargandoHorarios] = useState(false);
-const [nuevoHorario, setNuevoHorario] = useState({ dia: 'Lunes', hora_inicio: '08:00', hora_fin: '17:00' });
-  const [form, setForm] = useState({
-    nombre: '', usuario: '', password: '', email: '',
-    telefono: '', role_id: 3, area_id: '', especialidad: '',
-    sueldo: '', contrato: 'indefinido', fecha_nac: '',
-    fecha_ingreso: '', activo: true,
-  });
+const [nuevoHorario, setNuevoHorario] = useState({ 
+  dia: 'Lunes', 
+  hora_inicio: '08:00', 
+  hora_fin: '17:00',
+  slot_minutos: 60  // ✅ NUEVO
+});
+ const [form, setForm] = useState({
+  nombre: '', usuario: '', password: '', email: '',
+  telefono: '', role_id: 3, area_id: '', especialidad: '',
+  sueldo: '', contrato: 'indefinido', fecha_nac: '',
+  fecha_ingreso: '', activo: true,
+  areas_ids: [] as number[],
+  actividades_geronto_ids: [] as number[],
+});
+
 
   const [formArea, setFormArea] = useState({
     nombre: '', emoji: '🏥', color: 'emerald', descripcion: '', activo: true,
@@ -112,17 +120,27 @@ const [nuevoHorario, setNuevoHorario] = useState({ dia: 'Lunes', hora_inicio: '0
     }
   }
 
-  function abrirModalNuevo() {
-    setEsNuevo(true);
-    setForm({ nombre: '', usuario: '', password: '', email: '', telefono: '', role_id: 3, area_id: '', especialidad: '', sueldo: '', contrato: 'indefinido', fecha_nac: '', fecha_ingreso: '', activo: true });
-    setModalUsuario({});
-  }
+function abrirModalNuevo() {
+  setEsNuevo(true);
+  setForm({ nombre: '', usuario: '', password: '', email: '', telefono: '', role_id: 3, area_id: '', especialidad: '', sueldo: '', contrato: 'indefinido', fecha_nac: '', fecha_ingreso: '', activo: true, areas_ids: [], actividades_geronto_ids: [] });
+  setModalUsuario({});
+}
 
-  function abrirModalEditar(u: any) {
-    setEsNuevo(false);
-    setForm({ nombre: u.nombre || '', usuario: u.usuario || '', password: '', email: u.email || '', telefono: u.telefono || '', role_id: u.role_id || 3, area_id: u.area_id || '', especialidad: u.especialidad || '', sueldo: u.sueldo || '', contrato: u.contrato || 'indefinido', fecha_nac: u.fecha_nac ? u.fecha_nac.split('T')[0] : '', fecha_ingreso: u.fecha_ingreso ? u.fecha_ingreso.split('T')[0] : '', activo: u.activo });
-    setModalUsuario(u);
-  }
+function abrirModalEditar(u: any) {
+  setEsNuevo(false);
+  setForm({
+    nombre: u.nombre || '', usuario: u.usuario || '', password: '',
+    email: u.email || '', telefono: u.telefono || '', role_id: u.role_id || 3,
+    area_id: u.area_id || '', especialidad: u.especialidad || '',
+    sueldo: u.sueldo || '', contrato: u.contrato || 'indefinido',
+    fecha_nac: u.fecha_nac ? u.fecha_nac.split('T')[0] : '',
+    fecha_ingreso: u.fecha_ingreso ? u.fecha_ingreso.split('T')[0] : '',
+    activo: u.activo,
+    areas_ids: u.areas ? u.areas.map((a: any) => a.id) : [],
+    actividades_geronto_ids: u.actividades_geronto ? u.actividades_geronto.map((a: any) => a.id) : [],
+  });
+  setModalUsuario(u);
+}
 
   function abrirModalNuevoArea() {
     setEsNuevoArea(true);
@@ -172,22 +190,26 @@ const [nuevoHorario, setNuevoHorario] = useState({ dia: 'Lunes', hora_inicio: '0
     setModalActividad(a);
   }
 
-  async function guardarUsuario(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const datos: any = { ...form };
-      if (!datos.password) delete datos.password;
-      if (!datos.area_id) datos.area_id = null;
-      if (!datos.sueldo) datos.sueldo = null;
-      if (!datos.fecha_nac) datos.fecha_nac = null;
-      if (!datos.fecha_ingreso) datos.fecha_ingreso = null;
-      esNuevo ? await crearUsuario(datos) : await actualizarUsuario(modalUsuario.id, datos);
-      setModalUsuario(null);
-      await cargarDatos();
-    } catch (err: any) {
-      alert(err.response?.data?.mensaje || 'Error al guardar');
+async function guardarUsuario(e: React.FormEvent) {
+  e.preventDefault();
+  try {
+    const datos: any = { ...form };
+    if (!datos.password) delete datos.password;
+    if (!datos.area_id) datos.area_id = null;
+    if (!datos.sueldo) datos.sueldo = null;
+    if (!datos.fecha_nac) datos.fecha_nac = null;
+    if (!datos.fecha_ingreso) datos.fecha_ingreso = null;
+    // area_id principal = primera área seleccionada
+    if (datos.areas_ids && datos.areas_ids.length > 0) {
+      datos.area_id = datos.areas_ids[0];
     }
+    esNuevo ? await crearUsuario(datos) : await actualizarUsuario(modalUsuario.id, datos);
+    setModalUsuario(null);
+    await cargarDatos();
+  } catch (err: any) {
+    alert(err.response?.data?.mensaje || 'Error al guardar');
   }
+}
 
   async function guardarArea(e: React.FormEvent) {
     e.preventDefault();
@@ -324,16 +346,18 @@ async function agregarHorarioProfesional() {
       dia: h.dia,
       hora_inicio: h.hora_inicio.slice(0, 5),
       hora_fin: h.hora_fin.slice(0, 5),
+      slot_minutos: h.slot_minutos || 60  // ✅ NUEVO
     }));
     const nuevos = [...horariosNormalizados, {
       dia: nuevoHorario.dia,
       hora_inicio: nuevoHorario.hora_inicio,
       hora_fin: nuevoHorario.hora_fin,
+      slot_minutos: nuevoHorario.slot_minutos  // ✅ NUEVO
     }];
     await guardarHorarios(modalHorariosProfesional.id, nuevos);
     const data = await getHorarios(modalHorariosProfesional.id);
     setHorariosProfesional(data);
-    setNuevoHorario({ dia: 'Lunes', hora_inicio: '08:00', hora_fin: '17:00' });
+    setNuevoHorario({ dia: 'Lunes', hora_inicio: '08:00', hora_fin: '17:00', slot_minutos: 60 });
   } catch (err) {
     console.error(err);
     alert('Error al agregar horario');
@@ -734,12 +758,58 @@ async function eliminarHorarioProfesional(index: number) {
                     <option value={1}>Administrador</option><option value={2}>Supervisor</option><option value={3}>Profesional</option><option value={4}>Recepcionista</option>
                   </select>
                 </div>
-                <div><label className="text-xs text-gray-500">Area</label>
-                  <select value={form.area_id} onChange={e => setForm({ ...form, area_id: e.target.value })} className="w-full border rounded-lg p-2 text-sm mt-1">
-                    <option value="">Sin area</option>
-                    {areas.map(a => <option key={a.id} value={a.id}>{a.emoji} {a.nombre}</option>)}
-                  </select>
-                </div>
+                <div>
+  <label className="text-xs text-gray-500 block mb-1">Áreas</label>
+  <div className="space-y-1.5 border rounded-lg p-2">
+    {areas.map(a => {
+      const seleccionada = form.areas_ids.includes(a.id);
+      const esGeronto = a.nombre.toLowerCase() === 'gerontologia';
+      return (
+        <label key={a.id} className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={seleccionada}
+            onChange={() => {
+              const nuevas = seleccionada
+                ? form.areas_ids.filter(id => id !== a.id)
+                : [...form.areas_ids, a.id];
+              // Si se deselecciona geronto, limpiar actividades
+              const nuevasActividades = !nuevas.includes(a.id) && esGeronto
+                ? []
+                : form.actividades_geronto_ids;
+              setForm({ ...form, areas_ids: nuevas, actividades_geronto_ids: nuevasActividades });
+            }}
+            className="rounded" />
+          <span className="text-sm">{a.emoji} {a.nombre}</span>
+        </label>
+      );
+    })}
+  </div>
+
+  {/* Actividades geronto si está seleccionada */}
+  {form.areas_ids.includes(areas.find(a => a.nombre.toLowerCase() === 'gerontologia')?.id || -1) && (
+    <div className="mt-3 border border-emerald-200 rounded-lg p-3 bg-emerald-50">
+      <p className="text-xs font-semibold text-emerald-700 mb-2">👴 Actividades de Gerontología que dará</p>
+      <div className="space-y-1.5">
+        {actividadesGeronto.map(act => {
+          const seleccionada = form.actividades_geronto_ids.includes(act.id);
+          return (
+            <label key={act.id} className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={seleccionada}
+                onChange={() => {
+                  const nuevas = seleccionada
+                    ? form.actividades_geronto_ids.filter(id => id !== act.id)
+                    : [...form.actividades_geronto_ids, act.id];
+                  setForm({ ...form, actividades_geronto_ids: nuevas });
+                }}
+                className="rounded" />
+              <span className="text-sm">{act.emoji} {act.nombre}</span>
+              <span className="text-[10px] text-gray-400 ml-auto">{act.dia} · {act.hora_inicio?.slice(0,5)}-{act.hora_fin?.slice(0,5)}</span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  )}
+</div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs text-gray-500">Email</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full border rounded-lg p-2 text-sm mt-1" /></div>
@@ -925,59 +995,78 @@ async function eliminarHorarioProfesional(index: number) {
         <p className="text-center text-gray-500 py-4">Cargando horarios...</p>
       ) : (
         <>
-          <div className="space-y-2 mb-4">
-            {horariosProfesional.length === 0 ? (
-              <p className="text-center text-gray-400 text-sm py-4">Sin horarios registrados</p>
-            ) : (
-              horariosProfesional.map((h, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium text-sm text-gray-800 w-24">{h.dia}</span>
-                    <span className="text-sm text-gray-600">{h.hora_inicio?.slice(0,5)} - {h.hora_fin?.slice(0,5)}</span>
-                  </div>
-                  <button
-                    onClick={() => eliminarHorarioProfesional(idx)}
-                    className="text-xs text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
+         <div className="space-y-2 mb-4">
+  {horariosProfesional.length === 0 ? (
+    <p className="text-center text-gray-400 text-sm py-4">Sin horarios registrados</p>
+  ) : (
+    horariosProfesional.map((h, idx) => (
+      <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+        <div className="flex items-center gap-3">
+          <span className="font-medium text-sm text-gray-800 w-24">{h.dia}</span>
+          <span className="text-sm text-gray-600">
+            {h.hora_inicio?.slice(0,5)} - {h.hora_fin?.slice(0,5)}
+          </span>
+          {/* ✅ NUEVO: Mostrar duración del slot */}
+          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+            {h.slot_minutos || 60} min
+          </span>
+        </div>
+        <button
+          onClick={() => eliminarHorarioProfesional(idx)}
+          className="text-xs text-red-600 hover:text-red-800 font-medium"
+        >
+          Eliminar
+        </button>
+      </div>
+    ))
+  )}
+</div>
 
           <div className="border-t pt-4">
             <p className="text-xs font-semibold text-gray-600 mb-3">Agregar horario</p>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <div>
-                <label className="text-xs text-gray-500">Dia</label>
-                <select
-                  value={nuevoHorario.dia}
-                  onChange={e => setNuevoHorario({ ...nuevoHorario, dia: e.target.value })}
-                  className="w-full border rounded-lg p-2 text-sm mt-1"
-                >
-                  {DIAS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Hora inicio</label>
-                <input
-                  type="time"
-                  value={nuevoHorario.hora_inicio}
-                  onChange={e => setNuevoHorario({ ...nuevoHorario, hora_inicio: e.target.value })}
-                  className="w-full border rounded-lg p-2 text-sm mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">Hora fin</label>
-                <input
-                  type="time"
-                  value={nuevoHorario.hora_fin}
-                  onChange={e => setNuevoHorario({ ...nuevoHorario, hora_fin: e.target.value })}
-                  className="w-full border rounded-lg p-2 text-sm mt-1"
-                />
-              </div>
-            </div>
+            <div className="grid grid-cols-4 gap-2 mb-3">  {/* Cambiar de grid-cols-3 a grid-cols-4 */}
+  <div>
+    <label className="text-xs text-gray-500">Dia</label>
+    <select
+      value={nuevoHorario.dia}
+      onChange={e => setNuevoHorario({ ...nuevoHorario, dia: e.target.value })}
+      className="w-full border rounded-lg p-2 text-sm mt-1"
+    >
+      {DIAS.map(d => <option key={d} value={d}>{d}</option>)}
+    </select>
+  </div>
+  <div>
+    <label className="text-xs text-gray-500">Hora inicio</label>
+    <input
+      type="time"
+      value={nuevoHorario.hora_inicio}
+      onChange={e => setNuevoHorario({ ...nuevoHorario, hora_inicio: e.target.value })}
+      className="w-full border rounded-lg p-2 text-sm mt-1"
+    />
+  </div>
+  <div>
+    <label className="text-xs text-gray-500">Hora fin</label>
+    <input
+      type="time"
+      value={nuevoHorario.hora_fin}
+      onChange={e => setNuevoHorario({ ...nuevoHorario, hora_fin: e.target.value })}
+      className="w-full border rounded-lg p-2 text-sm mt-1"
+    />
+  </div>
+  
+  {/* ✅ NUEVO: Selector de duración del slot */}
+  <div>
+    <label className="text-xs text-gray-500">Slot</label>
+    <select
+      value={nuevoHorario.slot_minutos}
+      onChange={e => setNuevoHorario({ ...nuevoHorario, slot_minutos: Number(e.target.value) })}
+      className="w-full border rounded-lg p-2 text-sm mt-1"
+    >
+      <option value={30}>30 min</option>
+      <option value={60}>60 min</option>
+    </select>
+  </div>
+</div>
             <button
               onClick={agregarHorarioProfesional}
               className="w-full bg-emerald-600 text-white rounded-lg py-2 text-sm hover:bg-emerald-700"

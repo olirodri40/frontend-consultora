@@ -149,43 +149,66 @@ export default function Zumba() {
     }
   }
 
-function calcularSesionesZumba(fechaInicio: string, clasesPagadas: number, asistencia: any[]) {
-  const sesiones: Date[] = [];
-  const diasClase = horariosZumba.filter(h => h.activo).map((h: any) => {
-    const dias: Record<string, number> = {
-      'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miercoles': 3,
-      'Jueves': 4, 'Viernes': 5, 'Sabado': 6
-    };
-    return dias[h.dia] ?? -1;
-  }).filter(d => d >= 0);
+  function calcularSesionesZumba(fechaInicio: string, clasesPagadas: number, asistencia: any[]) {
+    const sesiones: Date[] = [];
+    const diasClase = horariosZumba.filter(h => h.activo).map((h: any) => {
+      const dias: Record<string, number> = {
+        'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miercoles': 3,
+        'Jueves': 4, 'Viernes': 5, 'Sabado': 6
+      };
+      return dias[h.dia] ?? -1;
+    }).filter(d => d >= 0);
 
-  if (diasClase.length === 0) return sesiones;
+    if (diasClase.length === 0) return sesiones;
 
-  const MAX_TOTAL = clasesPagadas + 4;
-  const fecha = new Date(fechaInicio);
-  fecha.setDate(fecha.getDate() + 1);
-  let sesionesValidas = 0;
-  let maxIter = MAX_TOTAL * 3;
-
-  while (sesionesValidas < clasesPagadas && sesiones.length < MAX_TOTAL && maxIter > 0) {
-    if (diasClase.includes(fecha.getDay())) {
-      const fechaActual = new Date(fecha);
-      sesiones.push(fechaActual);
-      const fechaStr = fechaActual.toISOString().split('T')[0];
-      const registro = asistencia.find(a => a.fecha?.split('T')[0] === fechaStr);
-      if (registro?.estado !== 'permiso' && registro?.estado !== 'suspendida') {
-        sesionesValidas++;
-      }
-    }
+    const MAX_TOTAL = clasesPagadas + 4;
+    const fecha = new Date(fechaInicio);
     fecha.setDate(fecha.getDate() + 1);
-    maxIter--;
+    let sesionesValidas = 0;
+    let maxIter = MAX_TOTAL * 3;
+
+    while (sesionesValidas < clasesPagadas && sesiones.length < MAX_TOTAL && maxIter > 0) {
+      if (diasClase.includes(fecha.getDay())) {
+        const fechaActual = new Date(fecha);
+        sesiones.push(fechaActual);
+        const fechaStr = fechaActual.toISOString().split('T')[0];
+        const registro = asistencia.find(a => a.fecha?.split('T')[0] === fechaStr);
+        if (registro?.estado !== 'permiso' && registro?.estado !== 'suspendida') {
+          sesionesValidas++;
+        }
+      }
+      fecha.setDate(fecha.getDate() + 1);
+      maxIter--;
+    }
+    return sesiones;
   }
-  return sesiones;
-}
-function calcularClasesAutomatico(): number {
-  const diasActivos = horariosZumba.filter(h => h.activo).length;
-  return diasActivos * 4;
-}
+
+  function calcularClasesAutomatico(): number {
+    const diasActivos = horariosZumba.filter(h => h.activo).length;
+    return diasActivos * 4;
+  }
+
+  // 🆕 FUNCIÓN: Calcular progreso del ciclo (incluye faltas y permisos)
+  function calcularProgresoCiclo(p: any): number {
+    if (!p.ciclo_id) return 0;
+    
+    const asistidas = parseInt(p.clases_asistidas || 0);
+    const faltas = parseInt(p.clases_falta || 0);
+    const permisos = parseInt(p.clases_permiso || 0);
+    const totalMarcadas = asistidas + faltas + permisos;
+    const pagadas = p.clases_pagadas || 0;
+    
+    if (pagadas === 0) return 0;
+    
+    // El progreso se basa en cuántas clases ya fueron marcadas (asistió, falta o permiso)
+    return Math.min((totalMarcadas / pagadas) * 100, 100);
+  }
+
+  // 🆕 FUNCIÓN: Determinar si el ciclo está completo
+  function cicloCompleto(p: any): boolean {
+    return calcularProgresoCiclo(p) >= 100;
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
@@ -195,10 +218,10 @@ function calcularClasesAutomatico(): number {
         </div>
         <button
           onClick={() => {
-  const clases = calcularClasesAutomatico();
-  setNuevoForm(prev => ({ ...prev, clases_pagadas: clases }));
-  setModalNuevo(true);
-}}
+            const clases = calcularClasesAutomatico();
+            setNuevoForm(prev => ({ ...prev, clases_pagadas: clases }));
+            setModalNuevo(true);
+          }}
           className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg text-sm"
         >
           + Inscribir participante
@@ -245,11 +268,16 @@ function calcularClasesAutomatico(): number {
           {participantes.map(p => {
             const sinCiclo = !p.ciclo_id;
             const asistidas = parseInt(p.clases_asistidas || 0);
+            const faltas = parseInt(p.clases_falta || 0);
+            const permisos = parseInt(p.clases_permiso || 0);
+            const totalMarcadas = asistidas + faltas + permisos;
             const pagadas = p.clases_pagadas || 0;
-            const progreso = pagadas > 0 ? (asistidas / pagadas) * 100 : 0;
+            const progreso = calcularProgresoCiclo(p);
+            const completo = cicloCompleto(p);
+            const montoCiclo = p.monto || 0;
 
             return (
-              <div key={p.id} className="bg-white rounded-xl border p-4 shadow-sm">
+              <div key={p.id} className={`bg-white rounded-xl border p-4 shadow-sm ${completo ? 'border-emerald-400 bg-emerald-50/30' : ''}`}>
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h3 className="font-bold text-gray-800">{p.nombre}</h3>
@@ -262,35 +290,54 @@ function calcularClasesAutomatico(): number {
                     <button onClick={() => eliminarParticipante(p.id)} className="text-xs text-red-600 hover:text-red-800 font-medium">Eliminar</button>
                     {sinCiclo ? (
                       <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Sin ciclo</span>
+                    ) : completo ? (
+                      <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full">✓ Completo</span>
                     ) : (
                       <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Ciclo {p.numero_ciclo}</span>
                     )}
                   </div>
                 </div>
 
+                {/* 🆕 Mostrar costo del ciclo */}
+                {!sinCiclo && montoCiclo > 0 && (
+                  <div className="mb-2 flex items-center gap-1 text-xs text-gray-500">
+                    <span>💰 Costo ciclo:</span>
+                    <span className="font-bold text-gray-700">Bs {montoCiclo}</span>
+                    {p.metodo_pago && (
+                      <span className="text-[10px] text-gray-400 capitalize">({p.metodo_pago})</span>
+                    )}
+                  </div>
+                )}
+
                 {!sinCiclo && (
                   <>
                     <div className="mb-3">
                       <div className="flex justify-between text-xs text-gray-500 mb-1">
-                        <span>Clases: {asistidas} / {pagadas}</span>
-                        <span>{Math.round(progreso)}%</span>
+                        <span>Progreso: {totalMarcadas} / {pagadas}</span>
+                        <span className={completo ? 'text-emerald-600 font-bold' : ''}>
+                          {Math.round(progreso)}%
+                          {completo && ' ✓'}
+                        </span>
                       </div>
                       <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-pink-500 transition-all" style={{ width: `${progreso}%` }} />
+                        <div 
+                          className={`h-full transition-all ${completo ? 'bg-emerald-500' : 'bg-pink-500'}`} 
+                          style={{ width: `${progreso}%` }} 
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mb-3 text-center">
                       <div className="bg-emerald-50 rounded p-1">
-                        <p className="text-[10px] text-gray-500">Asistio</p>
+                        <p className="text-[10px] text-gray-500">Asistió</p>
                         <p className="text-sm font-bold text-emerald-600">{asistidas}</p>
                       </div>
                       <div className="bg-red-50 rounded p-1">
                         <p className="text-[10px] text-gray-500">Falta</p>
-                        <p className="text-sm font-bold text-red-600">{p.clases_falta || 0}</p>
+                        <p className="text-sm font-bold text-red-600">{faltas}</p>
                       </div>
                       <div className="bg-yellow-50 rounded p-1">
                         <p className="text-[10px] text-gray-500">Permiso</p>
-                        <p className="text-sm font-bold text-yellow-600">{p.clases_permiso || 0}</p>
+                        <p className="text-sm font-bold text-yellow-600">{permisos}</p>
                       </div>
                     </div>
                   </>
@@ -306,8 +353,16 @@ function calcularClasesAutomatico(): number {
                       <button onClick={() => abrirModalAsistencia(p)} className="flex-1 px-3 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-xs hover:bg-emerald-200">
                         Marcar asistencia
                       </button>
-                      <button onClick={() => setModalRenovar(p)} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200">
-                        Renovar
+                      {/* 🆕 Botón Renovar cambia de color cuando el ciclo está completo */}
+                      <button 
+                        onClick={() => setModalRenovar(p)} 
+                        className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                          completo 
+                            ? 'bg-emerald-500 text-white hover:bg-emerald-600' 
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {completo ? '✓ Renovar' : 'Renovar'}
                       </button>
                     </>
                   )}
@@ -318,6 +373,7 @@ function calcularClasesAutomatico(): number {
         </div>
       )}
 
+      {/* MODALES - Se mantienen igual, sin cambios */}
       {modalEditar !== null && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <form onSubmit={guardarEdicion} className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -396,10 +452,10 @@ function calcularClasesAutomatico(): number {
                 <div className="grid grid-cols-2 gap-2">
                   <input type="date" required value={nuevoForm.fecha_inicio} onChange={e => setNuevoForm({ ...nuevoForm, fecha_inicio: e.target.value })} className="border rounded-lg p-2 text-sm" />
                   <div className="border rounded-lg p-2 text-sm bg-gray-50 text-gray-500 flex flex-col">
-  <span className="text-xs text-gray-400">Clases</span>
-  <span className="font-medium">{nuevoForm.clases_pagadas} clases</span>
-  <span className="text-[10px] text-gray-400">{horariosZumba.filter(h => h.activo).length} dias x 4 sem</span>
-</div>
+                    <span className="text-xs text-gray-400">Clases</span>
+                    <span className="font-medium">{nuevoForm.clases_pagadas} clases</span>
+                    <span className="text-[10px] text-gray-400">{horariosZumba.filter(h => h.activo).length} dias x 4 sem</span>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <input type="number" placeholder="Monto Bs" required value={nuevoForm.monto} onChange={e => setNuevoForm({ ...nuevoForm, monto: Number(e.target.value) })} className="border rounded-lg p-2 text-sm" />
@@ -430,18 +486,18 @@ function calcularClasesAutomatico(): number {
                 <input name="fecha_inicio" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full border rounded-lg p-2 text-sm" />
               </div>
               <div>
-  <label className="text-xs text-gray-500">Clases pagadas</label>
-  <input
-    name="clases_pagadas"
-    type="number"
-    value={calcularClasesAutomatico()}
-    readOnly
-    className="w-full border rounded-lg p-2 text-sm bg-gray-50 text-gray-500"
-  />
-  <p className="text-[10px] text-gray-400 mt-1">
-    Calculado automaticamente: {horariosZumba.filter(h => h.activo).length} dias x 4 semanas
-  </p>
-</div>
+                <label className="text-xs text-gray-500">Clases pagadas</label>
+                <input
+                  name="clases_pagadas"
+                  type="number"
+                  value={calcularClasesAutomatico()}
+                  readOnly
+                  className="w-full border rounded-lg p-2 text-sm bg-gray-50 text-gray-500"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Calculado automaticamente: {horariosZumba.filter(h => h.activo).length} dias x 4 semanas
+                </p>
+              </div>
               <div>
                 <label className="text-xs text-gray-500">Monto Bs</label>
                 <input name="monto" type="number" defaultValue={400} required className="w-full border rounded-lg p-2 text-sm" />

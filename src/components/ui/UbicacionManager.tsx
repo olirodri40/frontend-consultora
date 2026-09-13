@@ -48,7 +48,13 @@ export default function UbicacionManager() {
       try {
         const settings = await getSettings();
         const { id, imagen_edificio_url, ...resto } = settings;
-        setDatos(resto);
+        // Los campos de contacto pueden venir null desde el backend (nunca
+        // se completaron) — los normalizamos a '' porque los inputs de
+        // texto de este formulario trabajan con string, no con null.
+        const restoSinNulls = Object.fromEntries(
+          Object.entries(resto).map(([k, v]) => [k, v ?? ''])
+        ) as Record<Campo, string>;
+        setDatos(restoSinNulls);
         setImagenActual(imagen_edificio_url);
       } catch (err) {
         console.error(err);

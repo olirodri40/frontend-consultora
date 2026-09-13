@@ -142,7 +142,7 @@ export default function SesionGrupalAsistenciaModal({
     if (!nombre.trim()) { setError('El nombre es obligatorio'); return; }
     setGuardando(true);
     try {
-      await inscribirEnSesionGrupal(sesionId, fecha, {
+      await inscribirEnSesionGrupal(sesionId as number, fecha, {
         paciente_nombre: nombre.trim(),
         paciente_telefono: telefono.trim() || undefined,
         patient_id: pacienteIdElegido || undefined,

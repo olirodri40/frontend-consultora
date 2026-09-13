@@ -10,7 +10,6 @@ import {
   getAsistenciaCicloZumba,
   getHistorialCiclosZumba,
   actualizarPagoZumba,
-  getParticipanteZumba,  
   getProfesionalZumba,
 } from '../services/zumba.service';
 import AbrazandoVidass from '../assets/AbrazandoVidass.jpg';
@@ -459,29 +458,6 @@ function filtrarCiclosActivos(participantes: any[]): any[] {
       return ahoraEnMinutos >= hh * 60 + mm - 20;
     });
   }
-
-  function obtenerEstadoCumpleanos(fechaNac: string | null): { proximo: boolean; mensaje: string; dias: number } {
-    if (!fechaNac) return { proximo: false, mensaje: '', dias: 0 };
-    const hoy = new Date();
-    const nacimiento = new Date(fechaNac);
-    const proximoCumple = new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate());
-    if (proximoCumple < hoy) {
-      proximoCumple.setFullYear(hoy.getFullYear() + 1);
-    }
-    const diffTime = proximoCumple.getTime() - hoy.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (diffDays <= 30) {
-      if (diffDays === 0) {
-        return { proximo: true, mensaje: 'Hoy', dias: 0 };
-      } else if (diffDays === 1) {
-        return { proximo: true, mensaje: 'Mañana', dias: 1 };
-      } else {
-        return { proximo: true, mensaje: `${diffDays} días`, dias: diffDays };
-      }
-    }
-    return { proximo: false, mensaje: '', dias: diffDays };
-  }
-
 
   // ── VISTA PRINCIPAL ──────────────────────────────────────────────────────
   return (

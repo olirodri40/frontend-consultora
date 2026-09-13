@@ -20,7 +20,9 @@ self.addEventListener('push', (event) => {
 
   const data = event.data.json();
 
-  const options: NotificationOptions = {
+  // "vibrate" es soportado en la práctica (Chrome/Android) pero no está en
+  // el tipo NotificationOptions de TypeScript — de ahí la extensión manual.
+  const options: NotificationOptions & { vibrate?: number[] } = {
     body: data.body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',

@@ -3,8 +3,8 @@ import { getDashboardData } from '../services/reportes.service';
 import { actualizarCitaService } from '../services/citas.service';
 import {
   Calendar, CheckCircle, XCircle,
-  Clock, Users, DollarSign, Activity, Dumbbell, HeartHandshake,
-  Bell, User, FileText, Award, MapPin, Music, Heart, MessageCircle,
+  Clock, Users, Activity, Dumbbell, HeartHandshake,
+  Bell, User, Award, MapPin, Music, Heart, MessageCircle,
 } from 'lucide-react';
 
 
@@ -18,10 +18,6 @@ export default function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [tabActiva, setTabActiva] = useState<'hoy' | 'manana'>('hoy');
-
-  const fechaLabel = new Date().toLocaleDateString('es', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -198,9 +194,6 @@ const abrirWhatsApp = (telefono: string, mensaje: string) => {
     // Opción 1: WhatsApp normal
     const whatsappNormal = `whatsapp://send?phone=${telefonoCompleto}&text=${mensaje}`;
     
-    // Opción 2: WhatsApp Business
-    const whatsappBusiness = `whatsapp://send?phone=${telefonoCompleto}&text=${mensaje}&app=business`;
-    
     // Mostrar diálogo de selección (si quieres control total)
     // Nota: El sistema Android/iOS mostrará opciones automáticamente
     window.location.href = whatsappNormal;
@@ -246,7 +239,7 @@ const abrirWhatsApp = (telefono: string, mensaje: string) => {
 
   if (!data) return null;
 
-  const { citasHoy, citasManana, bloqueosHoy = [], bloqueosManana = [], ingresosHoy, ingresosMes, ciclosCompletos, profHoy, pacientesActivos, sesionesActivas } = data;
+  const { citasHoy, citasManana, bloqueosHoy = [], bloqueosManana = [], ciclosCompletos, profHoy, pacientesActivos, sesionesActivas } = data;
 
   const confirmadas  = citasHoy.filter((c: any) => c.estado === 'confirmada');
   const reservas     = citasHoy.filter((c: any) => c.estado === 'pendiente');

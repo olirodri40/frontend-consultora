@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { getCitas, actualizarCitaService, crearCita, crearMultiplesCitas, crearCitaGrupal, eliminarCitaService } from '../services/citas.service';
+import { getCitas, actualizarCitaService, crearMultiplesCitas, crearCitaGrupal, eliminarCitaService } from '../services/citas.service';
 import { getTodosHorariosProfesionales, getProfesionales, getServicios, getSecciones } from '../services/admin.service';import { getPacientes } from '../services/pacientes.service';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -85,7 +85,7 @@ const [areaSeleccionadaFiltro, setAreaSeleccionadaFiltro] = useState<number | nu
   }[]>([]);
   const [vistaActual, setVistaActual] = useState<'semana' | 'mes'>(() => (localStorage.getItem('agenda_vista') as 'semana' | 'mes') || 'semana');
   const [diaSeleccionadoMes, setDiaSeleccionadoMes] = useState<Date | null>(null);
-  const [mostrarFormularioMes, setMostrarFormularioMes] = useState<Date | null>(null);
+  const [, setMostrarFormularioMes] = useState<Date | null>(null);
   const isMobile = useIsMobile();
 
   // En tablet/laptop/PC intentamos que todas las horas entren en pantalla
@@ -126,7 +126,6 @@ const [areaSeleccionadaFiltro, setAreaSeleccionadaFiltro] = useState<number | nu
   }[]>([]);
   
   const [sesionesAdicionalesEditar, setSesionesAdicionalesEditar] = useState<{fecha: string, hora: string}[]>([]);
-  const [sesionesAEliminarEditar, setSesionesAEliminarEditar] = useState<number[]>([]);
   const [reagendando, setReagendando] = useState(false);
   const [formReagendar, setFormReagendar] = useState({ fecha: '', hora: '' });
   const accordionRef = useRef<HTMLDivElement>(null);
@@ -346,7 +345,7 @@ useEffect(() => {
       } else {
         const profsData = await getProfesionales();
         const areasExcluidas = ['Gerontologia', 'Zumba'];
-        profsFiltrados = profsData.filter(prof => 
+        profsFiltrados = profsData.filter((prof: any) =>
           !areasExcluidas.includes(prof.area_nombre)
         );
       }
@@ -577,7 +576,6 @@ function isSlotDisponible(hora: string, offset: number): boolean {
   function horasProfCalendario(): string[] {
     if (!profSeleccionado) return [];
     const horas = new Set<string>();
-    const areaIdUsar = areaSeleccionadaFiltro ?? profSeleccionado?.area_id;
     DIAS_SEMANA.forEach(dia => {
       horariosProfDia(dia).forEach(h => {
         const slotMinutos = h.slot_minutos || 60;
@@ -706,18 +704,6 @@ function citasDelDia(fecha: Date): any[] {
     };
   }
 
-  function getSesionesDelCiclo(cita: any): any[] {
-    if (!cita) return [];
-    const info = getGrupoInfoCanonico(cita);
-    return citas
-      .filter(c =>
-        c.patient_id === info.anclaPatientId &&
-        c.profesional_id === cita.profesional_id &&
-        c.ciclo === info.anclaCiclo
-      )
-      .sort((a, b) => Number(a.sesion) - Number(b.sesion));
-  }
-
   function getFilasSesionSeleccionada(cita: any): any[] {
     if (!cita) return [];
     if (!cita.grupo_id) return [cita];
@@ -741,48 +727,6 @@ function citasDelDia(fecha: Date): any[] {
       h.dia === diaNombre &&
       Number(h.area_id) === Number(areaIdUsar)
     );
-  }
-
-  function abrirModalNuevaCitaMes(fecha: Date) {
-    if (!profSeleccionado) return;
-    if (usuario?.rol === 'profesional') return;
-    const fechaStr = fecha.toISOString().split('T')[0];
-    if (!profTrabajaDia(fecha)) return;
-    
-    const areaIdUsar = areaSeleccionadaFiltro ?? profSeleccionado?.area_id;
-    const horas = horasProfParaDia(profSeleccionado.id, fechaStr, areaIdUsar);
-    
-    const diaSemana = DIAS_JS[fecha.getDay()];
-    const offsetDia = DIAS_SEMANA.indexOf(diaSemana);
-    const primeraHoraLibre = horas.find(h => isSlotDisponible(h, offsetDia));
-    if (!primeraHoraLibre) { alert('No hay horarios disponibles para este día'); return; }
-    setModalNuevaCita({ hora: primeraHoraLibre, fecha: fechaStr });
-    setPacienteSeleccionado(null); setBuscarPaciente(''); setModoNuevoPaciente(true);
-    setFormPaciente({ nombre: '', telefono: '', carnet: '', edad: '', contacto_relacion: '', contacto_nombre: '', contacto_telefono: '' });
-        setFormCita({ total_sesiones: 1, modalidad: 'presencial', estado: 'pendiente', monto_total: '', monto_pagado: '', metodo_pago: 'efectivo', servicio_id: '', servicio_nombre: '', notas: '' });
-    setSesionesAdicionales([]);
-    setAcompanantes([]);
-    setSeccionSeleccionadaNueva('');
-  }
-
-  function handleCarnetBlur(e: React.FocusEvent<HTMLInputElement>) {
-    const carnetIngresado = e.target.value.trim();
-    if (!carnetIngresado) return;
-    const existente = pacientes.find(p => p.carnet && p.carnet.trim() === carnetIngresado);
-    if (existente) {
-      const cargar = confirm(`Ya existe un paciente registrado con este carnet:\n\n${existente.nombre}\n\n¿Deseas cargar sus datos? (podrás editar el teléfono si cambió)`);
-      if (cargar) {
-        setFormPaciente({
-          nombre: existente.nombre || '',
-          edad: existente.edad || '',
-          telefono: existente.telefono || '',
-          carnet: existente.carnet || carnetIngresado,
-          contacto_relacion: existente.contacto_relacion || '',
-          contacto_nombre: existente.contacto_nombre || '',
-          contacto_telefono: existente.contacto_telefono || '',
-        });
-      }
-    }
   }
 
   // ✅ BUSCAR PACIENTES MIENTRAS ESCRIBES (AUTOCOMPLETADO)
@@ -2280,7 +2224,6 @@ async function guardarEdicionCita(e: React.FormEvent) {
                   const esUltimaDerecha = (idx + 1) % 7 === 0;
                   const tieneCitas = citasDia.length > 0;
                   const estaSeleccionado = diaSeleccionadoMes && fecha.toDateString() === diaSeleccionadoMes.toDateString();
-                  const formularioAbierto = mostrarFormularioMes && fecha.toDateString() === mostrarFormularioMes.toDateString();
                   return (
                     <div
   key={fecha.toISOString()}

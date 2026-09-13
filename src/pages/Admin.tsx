@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Eye, Trash2, Pencil, Search, Filter, X, 
-  Users, UserCog, Building2, Briefcase, 
-  Clock, Activity, LayoutDashboard, ChevronRight,
+import {
+  Trash2, Pencil, Search, X,
+  Users, UserCog, Building2, Briefcase,
+  Clock, Activity, LayoutDashboard,
   UserPlus, Plus, AlertCircle, CheckCircle, Calendar,
-  Clock as ClockIcon, MapPin, User, ChevronDown, ChevronUp
+  Clock as ClockIcon, MapPin, User
 } from "lucide-react";
 import {
   getProfesionales,
@@ -16,7 +16,6 @@ import {
   getAuditLog,
   getAreas,
   actualizarArea,
-  eliminarArea,
   getServicios,
   crearServicio,
   actualizarServicio,
@@ -48,8 +47,7 @@ export default function Admin() {
   
   // Estado de tabs
   const [tabActiva, setTabActiva] = useState<Tab>('dashboard');
-  const [subTabServicios, setSubTabServicios] = useState<'servicios' | 'zumba' | 'geronto'>('servicios');
-  
+
   // Estado de datos
   const [profesionales, setProfesionales] = useState<any[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
@@ -92,13 +90,19 @@ export default function Admin() {
   
   // Horarios profesional
   const [horariosProfesional, setHorariosProfesional] = useState<any[]>([]);
-  const [cargandoHorarios, setCargandoHorarios] = useState(false);
-  const [nuevoHorario, setNuevoHorario] = useState({
+  const [, setCargandoHorarios] = useState(false);
+  const [nuevoHorario, setNuevoHorario] = useState<{
+    dia: string;
+    hora_inicio: string;
+    hora_fin: string;
+    slot_minutos: number;
+    area_id: string | number;
+  }>({
     dia: 'Lunes',
     hora_inicio: '08:00',
     hora_fin: '17:00',
     slot_minutos: 60,
-    area_id: '', 
+    area_id: '',
   });
 
   // Formularios
@@ -345,11 +349,6 @@ function toggleAreaCompleta(areaId: number) {
   }));
 }
 
- function abrirModalNuevoArea() {
-  setEsNuevoArea(true);
-  setFormArea({ nombre: '', descripcion: '', activo: true }); // ✅ activo: true
-  setModalArea({});
-}
 
   function abrirModalEditarArea(a: any) {
     setEsNuevoArea(false);
@@ -602,14 +601,6 @@ async function guardarServicio(e: React.FormEvent) {
   }
 
   // Funciones de eliminación
-  async function handleEliminarArea(id: number) {
-    if (!confirm('¿Seguro que deseas eliminar esta área? Esto afectará a los servicios asociados.')) return;
-    try {
-      await eliminarArea(id);
-      await cargarDatos();
-    } catch (err: any) { alert(err.response?.data?.mensaje || 'Error al eliminar'); }
-  }
-
   async function handleEliminarServicio(id: number) {
     if (!confirm('¿Seguro que deseas eliminar este servicio?')) return;
     try {

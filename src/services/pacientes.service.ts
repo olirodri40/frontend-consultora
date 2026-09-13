@@ -14,13 +14,13 @@ export async function getPacientePorId(id: number) {
 export async function actualizarPaciente(
   id: number,
   datos: { 
-    nombre?: string; 
-    carnet?: string; 
-    telefono?: string; 
-    edad?: number;
-    contacto_relacion?: string;
-    contacto_nombre?: string;
-    contacto_telefono?: string;
+    nombre?: string;
+    carnet?: string | null;
+    telefono?: string | null;
+    edad?: number | null;
+    contacto_relacion?: string | null;
+    contacto_nombre?: string | null;
+    contacto_telefono?: string | null;
   }
 ) {
   await api.put(`/pacientes/${id}`, datos);

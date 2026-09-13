@@ -4,33 +4,9 @@ import { actualizarCitaService, eliminarCitaService, crearMultiplesCitas } from 
 import { getServicios, getTodosHorariosProfesionales, getProfesionales } from '../services/admin.service';
 import MedyFisioLogo from '../assets/medyfisio.jpg';
 
-// ── FUNCIÓN PARA DETERMINAR SI UN PACIENTE ESTÁ ACTIVO ──
-function pacienteTieneSesionesPendientes(citas: any[]): boolean {
-  // Agrupar citas por ciclo
-  const ciclos: Record<string, any[]> = {};
-  citas.forEach(c => {
-    const key = `${c.area_id}-${c.ciclo}`;
-    if (!ciclos[key]) ciclos[key] = [];
-    ciclos[key].push(c);
-  });
-
-  // Revisar cada ciclo
-  for (const key in ciclos) {
-    const citasCiclo = ciclos[key];
-    // Buscar si hay alguna sesión pendiente en este ciclo
-    const tienePendiente = citasCiclo.some(c => 
-      c.estado === 'confirmada' &&
-      c.asistio !== true &&
-      Number(c.sesion) < Number(c.total_sesiones)
-    );
-    if (tienePendiente) return true;
-  }
-  return false;
-}
 // ── LOGO ──────────────────────────────────────────────────────────────────────
 const LOGO_MEDYFISIO = MedyFisioLogo;
 
-const ORDINAL = ['1ra','2da','3ra','4ta','5ta','6ta','7ma','8va','9na','10ma'];
 const DIAS_JS: Record<number, string> = { 0: 'Domingo', 1: 'Lunes', 2: 'Martes', 3: 'Miercoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sabado' };
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -78,12 +54,6 @@ const IconPlus = () => (
   </svg>
 );
 
-const IconCalendar = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-  </svg>
-);
-
 const IconClock = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
@@ -102,21 +72,9 @@ const IconPhone = () => (
   </svg>
 );
 
-const IconUser = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-  </svg>
-);
-
 const IconX = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-  </svg>
-);
-
-const IconCheck = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="20 6 9 17 4 12"/>
   </svg>
 );
 
@@ -176,9 +134,9 @@ export default function Pacientes() {
   
   const [expandido, setExpandido] = useState<number | null>(null);
   const [citasPorPaciente, setCitasPorPaciente] = useState<Record<number, any[]>>({});
-  const [reagendandoCita, setReagendandoCita] = useState<any>(null);
-  const [formReagendar, setFormReagendar] = useState({ fecha: '', hora: '' });
-  
+  const [, setReagendandoCita] = useState<any>(null);
+  const [, setFormReagendar] = useState({ fecha: '', hora: '' });
+
   // ── MODALES PARA PACIENTE (datos personales) ──
   const [modalVerPaciente, setModalVerPaciente] = useState<any>(null);
   const [modalEditarPaciente, setModalEditarPaciente] = useState<any>(null);
@@ -382,36 +340,10 @@ export default function Pacientes() {
     } catch (err) { console.error(err); }
   }
 
-  async function guardarReagendar(pacienteId: number) {
-    if (!formReagendar.fecha || !formReagendar.hora) { alert('Selecciona fecha y hora'); return; }
-    try {
-      await actualizarCitaService(reagendandoCita.id, { fecha: formReagendar.fecha, hora: formReagendar.hora });
-      setReagendandoCita(null);
-      setFormReagendar({ fecha: '', hora: '' });
-      await recargarCitasPaciente(pacienteId);
-    } catch (err) { console.error(err); }
-  }
-
   // ── FUNCIONES PARA PACIENTE ──
  function abrirModalVerPaciente(p: any) {
   const contacto = obtenerContactoConGrupo(p.id, pacientes, citasPorPaciente);
   setModalVerPaciente({ ...p, ...contacto });
-}
-
-// ── FUNCIÓN CORREGIDA para abrir editar paciente ──
-function abrirModalEditarPaciente(p: any) {
-  // p ya tiene los campos de contacto porque viene de modalVerPaciente
-  setFormEditarPaciente({
-    nombre: p.nombre || '',
-    edad: p.edad || '',
-    carnet: p.carnet || '',
-    telefono: p.telefono || '',
-    contacto_relacion: p.contacto_relacion || '',
-    contacto_nombre: p.contacto_nombre || '',
-    contacto_telefono: p.contacto_telefono || '',
-  });
-  setModalEditarPaciente(p);
-  setModalVerPaciente(null);
 }
 
 // ── FUNCIÓN CORRECTA para guardar edición de PACIENTE ──
@@ -759,24 +691,6 @@ function obtenerEstadoPaciente(citasFiltradas: any[]): 'reservado' | 'activo' | 
   const inputCls = "w-full border border-gray-200 rounded-xl p-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#A000D1]/30 focus:border-[#A000D1] transition-all";
   const labelCls = "text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block";
 
-  function asistenciaLabel(asistio: boolean | null) {
-    if (asistio === true) return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 font-medium border border-violet-200">
-        <IconCheck /> Asistió
-      </span>
-    );
-    if (asistio === false) return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium border border-red-200">
-        <IconX /> No asistió
-      </span>
-    );
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 font-medium border border-yellow-200">
-        <IconClock /> Pendiente
-      </span>
-    );
-  }
-
   function MetodoPagoSelector({ value, onChange }: { value: string, onChange: (v: string) => void }) {
     const metodos = [
       { key: 'efectivo', label: 'Efectivo', icon: <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> },
@@ -1016,8 +930,6 @@ if (areaFiltro !== 'todas') {
 const estadoReal = calcularEstadoRealPaciente(citasFiltradas);
 const totalSesionesCompletadas = estadoReal.sesionesCompletadas;
 const totalSesiones = estadoReal.totalSesiones;
-const tienePendientes = estadoReal.tienePendientes;
-const sesionesPendientes = estadoReal.sesionesPendientes;
 const estadoPaciente = obtenerEstadoPaciente(citasFiltradas);
 const inicial = p.nombre?.charAt(0).toUpperCase() || '?';
 
@@ -1540,7 +1452,6 @@ const inicial = p.nombre?.charAt(0).toUpperCase() || '?';
       {modalVerCiclo && (() => {
         const p = modalVerCiclo.paciente;
         const c = modalVerCiclo.cita;
-        const grupo = modalVerCiclo.grupo;
         const montoTotal = Number(c?.monto_total || 0);
         const montoPagado = Number(c?.monto_pagado || 0);
         const pendiente = Math.max(montoTotal - montoPagado, 0);
@@ -1665,7 +1576,6 @@ const inicial = p.nombre?.charAt(0).toUpperCase() || '?';
                 // 👇 OBTENER DATOS NECESARIOS
         const citaActual = modalEditarCiclo.cita;
         const areaId = citaActual?.area_id;
-        const areaNombre = citaActual?.area_nombre?.toLowerCase() || '';
 
         // ✅ Obtener qué servicios tiene habilitados el profesional asignado a esta cita
         const profesionalAsignado = profesionales.find(pr => pr.id === citaActual?.profesional_id);

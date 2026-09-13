@@ -97,7 +97,7 @@ function obtenerActividadesConDiaHorario(pago: any, actividades: any[]): string 
   
   const ordenDias: Record<string, number> = {
     'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sábado': 6, 'Domingo': 7,
-    'Miercoles': 3, 'Miercoles': 3, 'Miercoles': 3,
+    'Miercoles': 3,
   };
   
   function normalizarDia(dia: string): string {
@@ -568,12 +568,6 @@ export default function Gerontologia() {
 
   const inputCls = "w-full border border-gray-200 rounded-xl p-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 transition-all";
   const labelCls = "text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block";
-
-  const actividadesPorDia = actividades.reduce((acc: any, act: any) => {
-    if (!acc[act.dia]) acc[act.dia] = [];
-    acc[act.dia].push(act);
-    return acc;
-  }, {});
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

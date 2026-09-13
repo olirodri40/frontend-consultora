@@ -22,3 +22,18 @@ export async function loginService(
   });
   return response.data;
 }
+
+export async function olvidePasswordService(email: string) {
+  const response = await api.post('/auth/olvide-password', { email });
+  return response.data;
+}
+
+export async function verificarCodigoService(email: string, codigo: string) {
+  const response = await api.post('/auth/verificar-codigo', { email, codigo });
+  return response.data;
+}
+
+export async function restablecerPasswordService(email: string, codigo: string, password_nueva: string) {
+  const response = await api.post('/auth/restablecer-password', { email, codigo, password_nueva });
+  return response.data;
+}

@@ -30,3 +30,7 @@ export async function crearMultiplesCitas(sesiones: any[]) {
 export async function eliminarCitaService(id: number) {
   await api.delete(`/citas/${id}`);
 }
+export async function crearCitaGrupal(datos: any) {
+  const response = await api.post('/citas/grupal', datos);
+  return response.data;
+}

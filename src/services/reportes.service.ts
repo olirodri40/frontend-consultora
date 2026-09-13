@@ -1,8 +1,11 @@
 import api from './api';
 
-export async function getReporteGeneral(mes?: string) {
-  const params = mes ? `?mes=${mes}` : '';
-  const response = await api.get(`/reportes${params}`);
+export async function getReporteGeneral(mes?: string, anio?: string) {
+  const params = new URLSearchParams();
+  if (mes) params.append('mes', mes);
+  else if (anio) params.append('anio', anio);
+  const qs = params.toString();
+  const response = await api.get(`/reportes${qs ? `?${qs}` : ''}`);
   return response.data;
 }
 

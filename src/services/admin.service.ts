@@ -42,10 +42,6 @@ export async function getAreas() {
   return response.data.areas;
 }
 
-export async function crearArea(datos: any) {
-  const response = await api.post('/areas', datos);
-  return response.data;
-}
 
 export async function actualizarArea(id: number, datos: any) {
   await api.put(`/areas/${id}`, datos);
@@ -112,4 +108,30 @@ export async function eliminarActividadGeronto(id: number) {
 export async function getTodosHorariosProfesionales() {
   const response = await api.get('/users/horarios/todos');
   return response.data.horarios;
+}
+
+export async function getSecciones(areaId: number) {
+  const response = await api.get(`/areas/${areaId}/secciones`);
+  return response.data.secciones;
+}
+
+export async function crearSeccion(areaId: number, datos: any) {
+  const response = await api.post(`/areas/${areaId}/secciones`, datos);
+  return response.data;
+}
+
+export async function actualizarSeccion(id: number, datos: any) {
+  await api.put(`/secciones/${id}`, datos);
+}
+
+export async function eliminarSeccion(id: number) {
+  await api.delete(`/secciones/${id}`);
+}
+
+export async function actualizarVisibilidadServicioProfesional(
+  userId: number,
+  servicioId: number,
+  visible_publico: boolean
+) {
+  await api.put(`/users/${userId}/servicios/${servicioId}/visibilidad`, { visible_publico });
 }

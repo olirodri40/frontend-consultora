@@ -10,7 +10,16 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dev-dist
 *.local
+
+# Certificados HTTPS locales (atados a la IP de esta máquina, no se suben)
+*.pem
+
+# Variables de entorno (VITE_API_URL, etc.)
+.env
+.env.local
+.env.*.local
 
 # Editor directories and files
 .vscode/*

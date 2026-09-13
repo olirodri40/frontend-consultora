@@ -1,25 +1,18 @@
+// src/layouts/MainLayout.tsx
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/ui/Sidebar';
+import Header from '../components/ui/Header';
 
 export default function MainLayout() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      
-      {/* Sidebar fijo */}
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
       <Sidebar />
-
-      {/* Contenido principal */}
-      <main
-        className="
-          transition-all duration-300
-          md:ml-72
-        "
-      >
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
+      <div className="flex-1 flex flex-col bg-gray-50">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
-        </div>
-      </main>
-
+        </main>
+      </div>
     </div>
   );
 }

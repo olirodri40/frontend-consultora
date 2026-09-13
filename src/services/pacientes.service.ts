@@ -13,14 +13,24 @@ export async function getPacientePorId(id: number) {
 
 export async function actualizarPaciente(
   id: number,
-  datos: { nombre?: string; carnet?: string; telefono?: string; edad?: number }
+  datos: { 
+    nombre?: string; 
+    carnet?: string; 
+    telefono?: string; 
+    edad?: number;
+    contacto_relacion?: string;
+    contacto_nombre?: string;
+    contacto_telefono?: string;
+  }
 ) {
   await api.put(`/pacientes/${id}`, datos);
 }
+
 export async function crearPaciente(datos: any) {
   const response = await api.post('/pacientes', datos);
   return response.data;
 }
+
 export async function actualizarPacienteService(id: number, datos: any) {
   const res = await api.put(`/pacientes/${id}`, datos);
   return res.data;

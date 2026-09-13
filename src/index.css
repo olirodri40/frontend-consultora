@@ -1,4 +1,8 @@
 @import "tailwindcss";
+
+/* ─────────────────────────────────────────────
+   FOCUS / OUTLINES
+   ───────────────────────────────────────────── */
 .recharts-wrapper:focus,
 .recharts-surface:focus,
 .recharts-sector:focus,
@@ -6,4 +10,37 @@
 svg:focus,
 svg *:focus {
   outline: none !important;
+}
+
+/* ─────────────────────────────────────────────
+   ANIMACIONES
+   ───────────────────────────────────────────── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* ─────────────────────────────────────────────
+   FONDO GLOBAL GRIS BLANCO VIOLETA
+   ───────────────────────────────────────────── */
+body {
+  background-color: #f8f5fa !important;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+#root {
+  background-color: #f8f5fa;
+  min-height: 100vh;
 }

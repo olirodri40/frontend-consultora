@@ -6,6 +6,7 @@ type UsuarioSesion = {
   usuario: string;
   rol: 'administrador' | 'profesional' | 'recepcionista' | 'supervisor';
   area_id?: number | null;
+  areas?: string[];
 };
 
 type AuthContextType = {
@@ -13,6 +14,7 @@ type AuthContextType = {
   login: (usuario: UsuarioSesion, token: string) => void;
   logout: () => void;
   estaLogueado: boolean;
+  actualizarNombreSesion: (nombre: string) => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -48,12 +50,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsuario(null);
   }
 
+  // Actualiza solo el nombre mostrado en la sesión (sidebar, header) después
+  // de que el usuario edite su propio perfil — sin necesidad de re-loguearse.
+  function actualizarNombreSesion(nombre: string) {
+    setUsuario(prev => {
+      if (!prev) return prev;
+      const actualizado = { ...prev, nombre };
+      localStorage.setItem('usuario', JSON.stringify(actualizado));
+      return actualizado;
+    });
+  }
+
   return (
     <AuthContext.Provider value={{
       usuario,
       login,
       logout,
       estaLogueado: usuario !== null,
+      actualizarNombreSesion,
     }}>
       {children}
     </AuthContext.Provider>

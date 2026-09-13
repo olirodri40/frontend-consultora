@@ -4,8 +4,14 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'fs'
 
-export default defineConfig({
-  server: {
+// Los certificados HTTPS locales (.pem) son solo de esta máquina — no se
+// suben al repo (.gitignore) y por eso no existen en Render/Vercel. Este
+// bloque de servidor con HTTPS solo tiene sentido para `vite` (desarrollo
+// local); si se leyera siempre, el build de producción se rompería con
+// ENOENT al no encontrar los .pem. `command === 'serve'` es justo el caso
+// de `vite`/`npm run dev`, nunca el de `vite build`.
+export default defineConfig(({ command }) => ({
+  server: command === 'serve' ? {
     host: '0.0.0.0',
     https: {
       key: fs.readFileSync('./192.168.1.7+2-key.pem'),
@@ -17,7 +23,7 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
-  },
+  } : undefined,
   plugins: [
     react(),
     tailwindcss(),
@@ -48,4 +54,4 @@ export default defineConfig({
       },
     }),
   ],
-})
+}))

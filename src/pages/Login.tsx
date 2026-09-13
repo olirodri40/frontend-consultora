@@ -4,7 +4,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { loginService } from '../services/auth.service';
 import RecuperarPasswordModal from '../components/ui/RecuperarPasswordModal';
-import logoMedyfisio from '../assets/logo-medyfisio.png';
+import logoSismedy from '../assets/logo-sismedy.png';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -60,7 +60,7 @@ export default function Login() {
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
 
         <div className="text-center mb-6">
-          <img src={logoMedyfisio} alt="MedyFisio" className="w-20 h-20 mx-auto mb-3 rounded-full shadow-md object-cover" />
+          <img src={logoSismedy} alt="SisMedy" className="w-20 h-20 mx-auto mb-3 object-contain" />
           <h1 className="text-2xl font-bold text-gray-800">SisMedy</h1>
           <p className="text-sm text-gray-500 mt-1">Ingresa tus credenciales</p>
         </div>

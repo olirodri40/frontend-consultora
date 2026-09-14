@@ -1450,7 +1450,7 @@ async function guardarEdicionCita(e: React.FormEvent) {
        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '12px' }}>
          <SesionesGrupalesPanel profesionales={profesionales} servicios={servicios} />
          <BloqueosAgendaPanel profesionales={profesionales} onCreado={cargarDatos} />
-         <ReservasPublicasPanel />
+         <ReservasPublicasPanel onReservaConfirmada={cargarDatos} />
        </div>
      )}
      <div

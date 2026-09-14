@@ -12,6 +12,8 @@ type ReservaPublica = {
   paciente_nombre: string;
   paciente_telefono: string;
   paciente_email: string | null;
+  paciente_carnet: string | null;
+  paciente_edad: number | null;
   notas: string | null;
   servicio_id: number;
   servicio_nombre: string;
@@ -32,7 +34,12 @@ function formatearFecha(fecha: string) {
   return `${d}/${m}/${y}`;
 }
 
-export default function ReservasPublicasPanel() {
+// onReservaConfirmada: lo llama la Agenda para recargar sus citas apenas se
+// confirma una reserva, así la cita nueva aparece sola en la grilla sin que
+// haya que refrescar la página a mano.
+export default function ReservasPublicasPanel({
+  onReservaConfirmada,
+}: { onReservaConfirmada?: () => void } = {}) {
   const [abierto, setAbierto] = useState(false);
   const [pestana, setPestana] = useState<'pendientes' | 'historial'>('pendientes');
   const [reservas, setReservas] = useState<ReservaPublica[]>([]);
@@ -116,6 +123,7 @@ export default function ReservasPublicasPanel() {
       });
       setReservaEnConfirmacion(null);
       cargarPendientes();
+      onReservaConfirmada?.();
     } catch (err: any) {
       setError(err?.response?.data?.mensaje || 'No se pudo confirmar la reserva');
     } finally {
@@ -212,7 +220,18 @@ export default function ReservasPublicasPanel() {
                       </span>
                       <span>{r.paciente_telefono}</span>
                     </div>
-                    {r.notas && <p className="text-[11px] text-gray-400 mt-1 italic">"{r.notas}"</p>}
+                    {(r.paciente_carnet || r.paciente_edad) && (
+                      <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+                        {r.paciente_carnet && <span>CI: {r.paciente_carnet}</span>}
+                        {r.paciente_edad && <span>{r.paciente_edad} años</span>}
+                      </div>
+                    )}
+                    {r.notas && (
+                      <p className="text-[11px] text-gray-500 mt-1.5 bg-gray-50 border border-gray-100 rounded-lg px-2 py-1.5">
+                        <span className="font-semibold text-gray-400">Nota del paciente: </span>
+                        {r.notas}
+                      </p>
+                    )}
                     <div className="flex gap-2 mt-3">
                       <button
                         onClick={() => abrirConfirmacion(r)}

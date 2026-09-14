@@ -108,6 +108,18 @@ function inicioDePeriodo(fecha: Date, granularidad: 'semanal' | 'mensual' | 'anu
   return new Date(fecha.getFullYear(), fecha.getMonth(), 1);
 }
 
+// El backend manda periodo_orden como una marca UTC a medianoche (ej.
+// "2026-09-01T00:00:00.000Z"). Si se lee con `new Date(...)` y luego se usa
+// .getMonth()/.getFullYear() (hora LOCAL), en zonas horarias negativas como
+// Bolivia (UTC-4) esa medianoche UTC cae en el día/mes anterior localmente
+// (31 de agosto 8pm en vez de 1 de septiembre) — el gráfico terminaba
+// agrupando los datos un mes antes. Esta función lee la fecha "de
+// calendario" tal cual la mandó el backend, ignorando el desfase de huso horario.
+function fechaDeCalendarioUTC(iso: string): Date {
+  const d = new Date(iso);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
 function sumarPeriodos(fecha: Date, cantidad: number, granularidad: 'semanal' | 'mensual' | 'anual'): Date {
   const d = new Date(fecha);
   if (granularidad === 'anual') d.setFullYear(d.getFullYear() + cantidad);
@@ -142,7 +154,7 @@ function AreaCard({ area, granularidad }: AreaCardProps) {
   const ventana = [-1, 0, 1].map(offset => sumarPeriodos(periodoActual, offset, granularidad));
 
   const chartData = ventana.map((fechaPeriodo, index) => {
-    const encontrado = area.periodos.find(p => mismoPeriodo(new Date(p.orden), fechaPeriodo, granularidad));
+    const encontrado = area.periodos.find(p => mismoPeriodo(fechaDeCalendarioUTC(p.orden), fechaPeriodo, granularidad));
     return {
       id: `${area.area_id}-${index}`,
       label: etiquetaDePeriodo(fechaPeriodo, granularidad),

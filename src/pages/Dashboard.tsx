@@ -264,37 +264,37 @@ const abrirWhatsApp = (telefono: string, mensaje: string) => {
       {/* ──────── TARJETAS DE MÉTRICAS ──────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Citas Hoy */}
-        <div className="bg-white rounded-2xl border border-[#efedf0] p-4 text-center hover:shadow-xl transition-all duration-300">
-          <div className="flex items-center justify-center gap-2 mb-1">
+        <div className="bg-white rounded-2xl border border-[#efedf0] p-3 sm:p-4 text-center hover:shadow-xl transition-all duration-300">
+          <div className="flex items-center justify-center gap-1.5 mb-1 min-w-0">
             <Calendar size={16} className="text-purple-500" />
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Citas hoy</p>
+            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-500 uppercase tracking-wider truncate">Citas hoy</p>
           </div>
           <p className="text-2xl font-bold text-purple-600">{citasHoy.length}</p>
         </div>
 
         {/* Citas Mañana */}
-        <div className="bg-white rounded-2xl border border-[#efedf0] p-4 text-center hover:shadow-xl transition-all duration-300">
-          <div className="flex items-center justify-center gap-2 mb-1">
+        <div className="bg-white rounded-2xl border border-[#efedf0] p-3 sm:p-4 text-center hover:shadow-xl transition-all duration-300">
+          <div className="flex items-center justify-center gap-1.5 mb-1 min-w-0">
             <Calendar size={16} className="text-emerald-500" />
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Citas mañana</p>
+            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-500 uppercase tracking-wider truncate">Citas mañana</p>
           </div>
           <p className="text-2xl font-bold text-emerald-600">{citasManana.length}</p>
         </div>
 
         {/* Pacientes Activos */}
-        <div className="bg-white rounded-2xl border border-[#efedf0] p-4 text-center hover:shadow-xl transition-all duration-300">
-          <div className="flex items-center justify-center gap-2 mb-1">
+        <div className="bg-white rounded-2xl border border-[#efedf0] p-3 sm:p-4 text-center hover:shadow-xl transition-all duration-300">
+          <div className="flex items-center justify-center gap-1.5 mb-1 min-w-0">
             <Users size={16} className="text-blue-500" />
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Pacientes activos</p>
+            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-500 uppercase tracking-wider truncate">Pacientes activos</p>
           </div>
           <p className="text-2xl font-bold text-blue-600">{pacientesActivos || 0}</p>
         </div>
 
         {/* Sesiones Activas */}
-        <div className="bg-white rounded-2xl border border-[#efedf0] p-4 text-center hover:shadow-xl transition-all duration-300">
-          <div className="flex items-center justify-center gap-2 mb-1">
+        <div className="bg-white rounded-2xl border border-[#efedf0] p-3 sm:p-4 text-center hover:shadow-xl transition-all duration-300">
+          <div className="flex items-center justify-center gap-1.5 mb-1 min-w-0">
             <Activity size={16} className="text-orange-500" />
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Sesiones activas</p>
+            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-500 uppercase tracking-wider truncate">Sesiones activas</p>
           </div>
           <p className="text-2xl font-bold text-orange-600">{sesionesActivas || 0}</p>
         </div>

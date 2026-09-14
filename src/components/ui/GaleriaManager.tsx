@@ -6,7 +6,7 @@ import {
   crearItemGaleria,
   actualizarItemGaleria,
   eliminarItemGaleria,
-  FILE_BASE_URL,
+  resolverUrlArchivo,
   type GaleriaItem,
   type TipoGaleria,
 } from '../../services/sitioWeb.service';
@@ -236,13 +236,13 @@ export default function GaleriaManager({ tipos }: { tipos: TipoGaleria[] }) {
                 <div className="h-36 bg-gray-100 flex items-center justify-center relative overflow-hidden">
                   {(item.tipo === 'imagen' || item.tipo === 'hero') && item.archivo_url && (
                     <img
-                      src={`${FILE_BASE_URL}${item.archivo_url}`}
+                      src={resolverUrlArchivo(item.archivo_url)}
                       alt={item.titulo}
                       className="w-full h-full object-cover"
                     />
                   )}
                   {item.tipo === 'video' && item.archivo_url && (
-                    <video src={`${FILE_BASE_URL}${item.archivo_url}`} className="w-full h-full object-cover" muted />
+                    <video src={resolverUrlArchivo(item.archivo_url)} className="w-full h-full object-cover" muted />
                   )}
                   {ytId && (
                     <img

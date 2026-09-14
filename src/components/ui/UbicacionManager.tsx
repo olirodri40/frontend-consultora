@@ -4,7 +4,7 @@ import { Loader2, UploadCloud, Save, CheckCircle2 } from 'lucide-react';
 import {
   getSettings,
   actualizarSettings,
-  FILE_BASE_URL,
+  resolverUrlArchivo,
   type SiteSettings,
 } from '../../services/sitioWeb.service';
 
@@ -150,7 +150,7 @@ export default function UbicacionManager() {
           <div className="w-28 h-28 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0">
             {(imagenNueva || imagenActual) && (
               <img
-                src={imagenNueva ? URL.createObjectURL(imagenNueva) : `${FILE_BASE_URL}${imagenActual}`}
+                src={imagenNueva ? URL.createObjectURL(imagenNueva) : resolverUrlArchivo(imagenActual)}
                 alt="Edificio"
                 className="w-full h-full object-cover"
               />

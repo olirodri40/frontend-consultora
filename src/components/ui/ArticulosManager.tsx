@@ -6,7 +6,7 @@ import {
   crearArticulo,
   actualizarArticulo,
   eliminarArticulo,
-  FILE_BASE_URL,
+  resolverUrlArchivo,
   type Articulo,
   type CategoriaArticulo,
 } from '../../services/sitioWeb.service';
@@ -227,7 +227,7 @@ export default function ArticulosManager() {
               <div className="w-20 h-20 rounded-xl bg-gray-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
                 {item.imagen_url ? (
                   <img
-                    src={`${FILE_BASE_URL}${item.imagen_url}`}
+                    src={resolverUrlArchivo(item.imagen_url)}
                     alt={item.titulo}
                     className="w-full h-full object-cover"
                   />

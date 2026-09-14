@@ -21,6 +21,15 @@ export interface GaleriaItem {
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '/api';
 export const FILE_BASE_URL = API_BASE.replace(/\/api\/?$/, '');
 
+// El backend puede devolver una ruta relativa antigua ("/uploads/...", modo
+// disco local) o una URL absoluta de Supabase Storage. Solo a la primera
+// hay que anteponerle FILE_BASE_URL — a la segunda no, o queda una URL
+// inválida (dos dominios pegados).
+export function resolverUrlArchivo(url: string | null | undefined): string {
+  if (!url) return '';
+  return /^https?:\/\//i.test(url) ? url : `${FILE_BASE_URL}${url}`;
+}
+
 export async function getGaleriaAdmin(): Promise<GaleriaItem[]> {
   const { data } = await api.get('/site-gallery');
   return data.items;

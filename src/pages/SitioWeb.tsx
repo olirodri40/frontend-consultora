@@ -39,7 +39,7 @@ export default function SitioWeb() {
         </p>
 
         <a
-          href="#"
+          href="https://medyfisio.com"
           target="_blank"
           rel="noreferrer"
           className="flex items-center gap-2 text-sm font-medium text-[#A000D1] hover:text-[#8800b3] border border-violet-200 hover:border-[#A000D1] rounded-xl px-4 py-2.5 transition-all"

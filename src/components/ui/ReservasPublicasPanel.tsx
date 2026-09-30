@@ -52,6 +52,11 @@ export default function ReservasPublicasPanel({
   const [profesionalElegido, setProfesionalElegido] = useState<number | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState('');
+  // Fecha/hora con las que se confirmará (por defecto las que pidió el paciente,
+  // pero se pueden cambiar si ese horario ya quedó ocupado).
+  const [fechaConfirm, setFechaConfirm] = useState('');
+  const [horaConfirm, setHoraConfirm] = useState('');
+  const [horariosDisponibles, setHorariosDisponibles] = useState<string[]>([]);
 
   const cargarPendientes = useCallback(async () => {
     setCargando(true);
@@ -97,20 +102,45 @@ export default function ReservasPublicasPanel({
     }
   }
 
+  const cargarCandidatos = useCallback(async (reservaId: number, fecha: string, hora: string) => {
+    setCargandoCandidatos(true);
+    setProfesionalElegido(null);
+    try {
+      const { data } = await api.get(`/reservas-publicas/${reservaId}/candidatos`, { params: { fecha, hora } });
+      setCandidatos(data.candidatos || []);
+      setHorariosDisponibles(data.horariosDisponibles || []);
+    } catch (err) {
+      console.error(err);
+      setCandidatos([]);
+      setHorariosDisponibles([]);
+    } finally {
+      setCargandoCandidatos(false);
+    }
+  }, []);
+
   async function abrirConfirmacion(reserva: ReservaPublica) {
     setReservaEnConfirmacion(reserva);
     setProfesionalElegido(null);
     setError('');
-    setCargandoCandidatos(true);
-    try {
-      const { data } = await api.get(`/reservas-publicas/${reserva.id}/candidatos`);
-      setCandidatos(data.candidatos || []);
-    } catch (err) {
-      console.error(err);
-      setCandidatos([]);
-    } finally {
-      setCargandoCandidatos(false);
-    }
+    const f = reserva.fecha;
+    const h = reserva.hora.slice(0, 5);
+    setFechaConfirm(f);
+    setHoraConfirm(h);
+    cargarCandidatos(reserva.id, f, h);
+  }
+
+  function cambiarFechaConfirm(nuevaFecha: string) {
+    if (!reservaEnConfirmacion || !nuevaFecha) return;
+    setFechaConfirm(nuevaFecha);
+    setError('');
+    cargarCandidatos(reservaEnConfirmacion.id, nuevaFecha, horaConfirm);
+  }
+
+  function cambiarHoraConfirm(nuevaHora: string) {
+    if (!reservaEnConfirmacion) return;
+    setHoraConfirm(nuevaHora);
+    setError('');
+    cargarCandidatos(reservaEnConfirmacion.id, fechaConfirm, nuevaHora);
   }
 
   async function confirmar() {
@@ -120,6 +150,8 @@ export default function ReservasPublicasPanel({
     try {
       await api.put(`/reservas-publicas/${reservaEnConfirmacion.id}/confirmar`, {
         professional_id: profesionalElegido,
+        fecha: fechaConfirm,
+        hora: horaConfirm,
       });
       setReservaEnConfirmacion(null);
       cargarPendientes();
@@ -307,8 +339,40 @@ export default function ReservasPublicasPanel({
               </button>
             </div>
             <p className="text-xs text-gray-500 mb-3">
-              {reservaEnConfirmacion.servicio_nombre} — {formatearFecha(reservaEnConfirmacion.fecha)} a las{' '}
+              {reservaEnConfirmacion.servicio_nombre} — pedido para {formatearFecha(reservaEnConfirmacion.fecha)} a las{' '}
               {reservaEnConfirmacion.hora.slice(0, 5)}
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 mb-1">
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500">Fecha</label>
+                <input
+                  type="date"
+                  value={fechaConfirm}
+                  onChange={(e) => cambiarFechaConfirm(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500">Hora</label>
+                <select
+                  value={horaConfirm}
+                  onChange={(e) => cambiarHoraConfirm(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white"
+                >
+                  {!horariosDisponibles.includes(horaConfirm) && (
+                    <option value={horaConfirm}>{horaConfirm} (ocupado)</option>
+                  )}
+                  {horariosDisponibles.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-3">
+              Si el horario pedido está ocupado, elige otra hora con profesional libre.
             </p>
 
             {cargandoCandidatos ? (
@@ -317,7 +381,7 @@ export default function ReservasPublicasPanel({
               </div>
             ) : candidatos.length === 0 ? (
               <p className="text-xs text-amber-600 py-3">
-                No hay profesionales disponibles para ese horario. Verifica su horario en Admin.
+                No hay profesionales libres a esa hora. Cambia la fecha u hora arriba, o verifica sus horarios en Admin.
               </p>
             ) : (
               <div className="space-y-1.5 max-h-52 overflow-y-auto">

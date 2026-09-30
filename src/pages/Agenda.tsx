@@ -130,6 +130,31 @@ const [areaSeleccionadaFiltro, setAreaSeleccionadaFiltro] = useState<number | nu
   const [formReagendar, setFormReagendar] = useState({ fecha: '', hora: '' });
   const accordionRef = useRef<HTMLDivElement>(null);
 
+  // ── Arrastrar para reagendar (drag & drop), solo en la vista semana ──
+  // `drag` dispara re-render (para el fantasma y el resaltado del destino);
+  // `dragRef` guarda el estado vivo del gesto sin re-renderizar en cada píxel.
+  const [drag, setDrag] = useState<{
+    activo: boolean;
+    nombre: string;
+    targetFecha: string | null;
+    targetHora: string | null;
+    targetValido: boolean;
+  } | null>(null);
+  const dragRef = useRef<{
+    cita: any; filas: any[];
+    startX: number; startY: number; lastX: number; lastY: number;
+    pointerId: number; pointerType: string;
+    activo: boolean;
+    longPress: ReturnType<typeof setTimeout> | null;
+    targetFecha: string | null; targetHora: string | null; targetValido: boolean;
+  } | null>(null);
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const suppressClickRef = useRef(false);
+  const [confirmMover, setConfirmMover] = useState<{
+    cita: any; filas: any[]; fecha: string; hora: string;
+    origen: string; destino: string; aviso: string;
+  } | null>(null);
+
   // ✅ PRIMERO: El useMemo (fuera del useState)
 const diasMostrar = useMemo(() => {
   if (!profSeleccionado) return ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
@@ -189,6 +214,14 @@ const [inicioSemana, setInicioSemana] = useState(() => {
   useEffect(() => { localStorage.setItem('agenda_vista', vistaActual); }, [vistaActual]);
   useEffect(() => { localStorage.setItem('agenda_area', areaExpandida); }, [areaExpandida]);
   useEffect(() => { cargarDatos(); }, []);
+
+  // Mientras se arrastra una cita en el celular, bloquear el scroll de la página
+  // (el listener debe ser NO pasivo para que preventDefault surta efecto).
+  useEffect(() => {
+    const onTouchMove = (e: TouchEvent) => { if (dragRef.current?.activo) e.preventDefault(); };
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => window.removeEventListener('touchmove', onTouchMove);
+  }, []);
     
         useEffect(() => {
     const areaIdActual = areaSeleccionadaFiltro ?? profSeleccionado?.area_id;
@@ -1226,10 +1259,170 @@ async function guardarEdicionCita(e: React.FormEvent) {
         hora: formReagendar.hora,
         asistio: null
       })));
-      setReagendando(false); 
+      setReagendando(false);
       cerrarCitaSeleccionada();
       await cargarDatos();
     } catch (err: any) { alert(err.response?.data?.mensaje || 'Error al reagendar'); }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  ARRASTRAR PARA REAGENDAR (drag & drop) — solo vista semana
+  //  PC: clic sostenido + mover. Celular: mantener presionado (long-press) y
+  //  mover. Un clic/toque corto sigue abriendo el modal como siempre.
+  // ─────────────────────────────────────────────────────────────────────────
+  const DRAG_UMBRAL_PX = 6;      // cuánto hay que mover (mouse) para empezar a arrastrar
+  const DRAG_LONGPRESS_MS = 300; // cuánto hay que mantener presionado (touch)
+
+  function puedeArrastrarCita(cita: any): boolean {
+    if (!cita) return false;
+    if (usuario?.rol === 'profesional') return false; // los profesionales solo ven
+    if (profesionalInactivo) return false;
+    return cita.estado === 'confirmada' || cita.estado === 'pendiente';
+  }
+
+  // Valida si una cita se puede soltar en (fecha, hora). Reutiliza exactamente
+  // las mismas reglas que el botón "Reagendar".
+  function validarDestinoDrag(cita: any, filas: any[], fecha: string, hora: string): { valido: boolean; aviso: string } {
+    const idsSesion = filas.map(f => f.id);
+    if (!horasProfParaDia(cita.profesional_id, fecha, cita.area_id).includes(hora)) {
+      return { valido: false, aviso: 'El profesional no trabaja a esa hora' };
+    }
+    if (!isSlotDisponiblePorFecha(fecha, hora, idsSesion, cita.profesional_id, cita.area_id)) {
+      return { valido: false, aviso: 'Esa hora ya está ocupada' };
+    }
+    let aviso = '';
+    const slotMin = getSlotMinutosProfesional();
+    const necesarios = cita.duracion_min ? Math.ceil(cita.duracion_min / slotMin) : 1;
+    if (necesarios > 1) {
+      const consec = getSlotsConsecutivosLibres(fecha, hora, cita.profesional_id, idsSesion);
+      if (consec < necesarios) {
+        aviso = `El servicio dura ${cita.duracion_min} min (${necesarios} horarios) pero solo hay ${consec} hora${consec === 1 ? '' : 's'} seguida${consec === 1 ? '' : 's'} libre${consec === 1 ? '' : 's'}. Se moverá solo a esa hora.`;
+      }
+    }
+    return { valido: true, aviso };
+  }
+
+  function celdaDestinoDesdePunto(x: number, y: number): { fecha: string; hora: string } | null {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const celda = el?.closest('[data-drop-fecha]') as HTMLElement | null;
+    if (!celda) return null;
+    const fecha = celda.getAttribute('data-drop-fecha');
+    const hora = celda.getAttribute('data-drop-hora');
+    if (!fecha || !hora) return null;
+    return { fecha, hora };
+  }
+
+  function onCitaPointerDown(e: React.PointerEvent, cita: any) {
+    suppressClickRef.current = false;
+    if (!puedeArrastrarCita(cita)) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return; // solo clic izquierdo
+    const filas = getFilasSesionSeleccionada(cita);
+    dragRef.current = {
+      cita, filas,
+      startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY,
+      pointerId: e.pointerId, pointerType: e.pointerType,
+      activo: false, longPress: null,
+      targetFecha: null, targetHora: null, targetValido: false,
+    };
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
+    if (e.pointerType === 'touch') {
+      dragRef.current.longPress = setTimeout(() => {
+        const d = dragRef.current;
+        if (!d) return;
+        d.activo = true;
+        suppressClickRef.current = true;
+        if (navigator.vibrate) { try { navigator.vibrate(15); } catch {} }
+        if (ghostRef.current) { ghostRef.current.style.left = d.lastX + 'px'; ghostRef.current.style.top = d.lastY + 'px'; }
+        setDrag({ activo: true, nombre: nombreGrupoDisplay(d.cita), targetFecha: null, targetHora: null, targetValido: false });
+      }, DRAG_LONGPRESS_MS);
+    }
+  }
+
+  function onCitaPointerMove(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    d.lastX = e.clientX; d.lastY = e.clientY;
+    const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
+
+    if (!d.activo) {
+      if (d.pointerType === 'mouse') {
+        if (dist <= DRAG_UMBRAL_PX) return;
+        d.activo = true;
+        suppressClickRef.current = true;
+        if (ghostRef.current) { ghostRef.current.style.left = e.clientX + 'px'; ghostRef.current.style.top = e.clientY + 'px'; }
+        setDrag({ activo: true, nombre: nombreGrupoDisplay(d.cita), targetFecha: null, targetHora: null, targetValido: false });
+      } else {
+        // touch: si se mueve antes del long-press, es un scroll → cancelar el gesto
+        if (dist > 12 && d.longPress) { clearTimeout(d.longPress); dragRef.current = null; }
+        return;
+      }
+    }
+
+    if (ghostRef.current) { ghostRef.current.style.left = e.clientX + 'px'; ghostRef.current.style.top = e.clientY + 'px'; }
+
+    const celda = celdaDestinoDesdePunto(e.clientX, e.clientY);
+    const nuevaFecha = celda?.fecha ?? null;
+    const nuevaHora = celda?.hora ?? null;
+    if (nuevaFecha !== d.targetFecha || nuevaHora !== d.targetHora) {
+      let valido = false;
+      if (celda) {
+        const esMismaCelda = celda.fecha === d.cita.fecha?.slice(0, 10) && celda.hora === d.cita.hora?.slice(0, 5);
+        valido = !esMismaCelda && validarDestinoDrag(d.cita, d.filas, celda.fecha, celda.hora).valido;
+      }
+      d.targetFecha = nuevaFecha; d.targetHora = nuevaHora; d.targetValido = valido;
+      setDrag({ activo: true, nombre: nombreGrupoDisplay(d.cita), targetFecha: nuevaFecha, targetHora: nuevaHora, targetValido: valido });
+    }
+  }
+
+  function onCitaPointerUp(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    if (d.longPress) clearTimeout(d.longPress);
+    const activo = d.activo;
+    const cita = d.cita, filas = d.filas;
+    const target = d.targetFecha && d.targetHora ? { fecha: d.targetFecha, hora: d.targetHora, valido: d.targetValido } : null;
+    dragRef.current = null;
+    setDrag(null);
+    if (!activo) return; // fue un toque/clic corto → el onClick abre el modal
+
+    if (target && target.valido) {
+      const { aviso } = validarDestinoDrag(cita, filas, target.fecha, target.hora);
+      setConfirmMover({
+        cita, filas, fecha: target.fecha, hora: target.hora,
+        origen: `${formatFecha(cita.fecha?.slice(0, 10))} · ${cita.hora?.slice(0, 5)}`,
+        destino: `${formatFecha(target.fecha)} · ${target.hora}`,
+        aviso,
+      });
+    }
+    // si el destino no es válido, la cita simplemente vuelve a su lugar
+  }
+
+  function onCitaPointerCancel(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    if (d.longPress) clearTimeout(d.longPress);
+    dragRef.current = null;
+    setDrag(null);
+  }
+
+  async function confirmarMover() {
+    if (!confirmMover) return;
+    const { cita, filas, fecha, hora } = confirmMover;
+    const idsAMover = new Set(filas.map(f => f.id));
+    const ocupadaPorCita = citas.some(c => c.fecha.startsWith(fecha) && c.profesional_id === cita.profesional_id && c.hora?.slice(0, 5) === hora && c.estado !== 'cancelada' && !idsAMover.has(c.id));
+    const gerontoOcupado = horaOcupadaPorGeronto(fecha, hora);
+    if (ocupadaPorCita || gerontoOcupado.ocupado) {
+      alert(`La hora ${hora} ya está ocupada.${gerontoOcupado.ocupado ? ' (Actividad de Gerontología)' : ''}`);
+      setConfirmMover(null);
+      return;
+    }
+    try {
+      await Promise.all(filas.map(f => actualizarCitaService(f.id, { fecha, hora, asistio: null })));
+      setConfirmMover(null);
+      await cargarDatos();
+    } catch (err: any) {
+      alert(err.response?.data?.mensaje || 'Error al reagendar');
+    }
   }
 
   const rangoLabel = vistaActual === 'semana'
@@ -1968,11 +2161,21 @@ async function guardarEdicionCita(e: React.FormEvent) {
                         const estilosBorde = getEstilosCelda(hora, idx);
 
                         return (
-                          <div key={`${dia}-${hora}`} style={{
+                          <div key={`${dia}-${hora}`}
+                            data-drop-fecha={fechaStr}
+                            data-drop-hora={hora}
+                            style={{
                             display: 'table-cell',
                             padding: '0.5px 1px',
                             verticalAlign: 'middle',
                             height: alturaPorFila != null ? alturaPorFila : undefined,
+                            outline: (drag?.activo && drag.targetFecha === fechaStr && drag.targetHora === hora)
+                              ? `2px solid ${drag.targetValido ? '#10b981' : '#f87171'}`
+                              : undefined,
+                            outlineOffset: '-2px',
+                            background: (drag?.activo && drag.targetFecha === fechaStr && drag.targetHora === hora)
+                              ? (drag.targetValido ? 'rgba(16,185,129,0.10)' : 'rgba(248,113,113,0.10)')
+                              : undefined,
                           }}>
                             {sesionGrupalAqui ? (
                               <div
@@ -2043,11 +2246,19 @@ async function guardarEdicionCita(e: React.FormEvent) {
                                    return (
                                   <div
                                     className={estilosBorde + ' agenda-slot-cell'}
-                                    onClick={() => { setCitaSeleccionada(cita); setEditandoCita(false); }}
+                                    onClick={() => {
+                                      if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+                                      setCitaSeleccionada(cita); setEditandoCita(false);
+                                    }}
+                                    onPointerDown={e => onCitaPointerDown(e, cita)}
+                                    onPointerMove={onCitaPointerMove}
+                                    onPointerUp={onCitaPointerUp}
+                                    onPointerCancel={onCitaPointerCancel}
                                     style={{
                                       height: alturaPorFila != null ? alturaPorFila : '30px',
                                       width: '100%',
-                                      cursor: 'pointer',
+                                      cursor: puedeArrastrarCita(cita) ? 'grab' : 'pointer',
+                                      touchAction: 'pan-y',
                                       background: colorCita.bg,
                                       border: `1px solid ${colorCita.border}`,
                                       overflow: 'hidden',
@@ -3783,6 +3994,49 @@ onClick={() => {
           onCambio={cargarDatos}
           onEditarAsistente={editarAsistenteSesionGrupal}
         />
+      )}
+
+      {/* Fantasma que sigue al cursor/dedo mientras se arrastra una cita */}
+      <div
+        ref={ghostRef}
+        style={{
+          position: 'fixed', left: 0, top: 0,
+          transform: 'translate(-50%, -130%)',
+          display: drag?.activo ? 'block' : 'none',
+          zIndex: 9999, pointerEvents: 'none',
+          background: drag?.targetValido ? '#ecfdf5' : '#fef2f2',
+          border: `2px solid ${drag?.targetValido ? '#10b981' : '#f87171'}`,
+          borderRadius: '10px', padding: '6px 10px',
+          boxShadow: '0 10px 28px rgba(0,0,0,0.22)',
+          fontSize: '11px', fontWeight: 700, color: '#374151',
+          maxWidth: '170px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+        {drag?.targetHora ? `${drag.targetHora} · ` : ''}{drag?.nombre}
+      </div>
+
+      {/* Confirmación al soltar una cita en un nuevo horario */}
+      {confirmMover && (
+        <div
+          onClick={() => setConfirmMover(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '16px' }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: '18px', padding: '20px', maxWidth: '340px', width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}>
+            <p style={{ fontSize: '15px', fontWeight: 800, color: '#111827', marginBottom: '6px' }}>¿Mover esta cita?</p>
+            <p style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>{nombreGrupoDisplay(confirmMover.cita)}</p>
+            <div style={{ background: '#f9fafb', borderRadius: '12px', padding: '10px 12px', margin: '10px 0', fontSize: '12px' }}>
+              <div style={{ textDecoration: 'line-through', color: '#9ca3af' }}>{confirmMover.origen}</div>
+              <div style={{ fontWeight: 700, color: '#A000D1', marginTop: '2px' }}>→ {confirmMover.destino}</div>
+            </div>
+            {confirmMover.aviso && (
+              <p style={{ fontSize: '11px', color: '#c2410c', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '6px 10px', marginBottom: '10px' }}>⚠ {confirmMover.aviso}</p>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => setConfirmMover(null)} style={{ flex: 1, padding: '10px', borderRadius: '12px', border: '1px solid #e5e7eb', background: '#fff', color: '#4b5563', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={confirmarMover} style={{ flex: 1, padding: '10px', borderRadius: '12px', border: 'none', background: '#A000D1', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>Confirmar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

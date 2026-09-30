@@ -2860,10 +2860,15 @@ setFormEditar({
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
 
-                {/* ── Reagendar: UNO solo para toda la cita, mueve a todos los pacientes juntos ── */}
-                <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button 
+            {/* ── Reagendar: disponible para citas CONFIRMADAS y también para RESERVAS
+                PENDIENTES (reservas del sitio web). Mueve a todos los pacientes de la
+                sesión juntos a la nueva fecha/hora. ── */}
+            {(citaSeleccionada.estado === 'confirmada' || citaSeleccionada.estado === 'pendiente') && !profesionalInactivo && (
+                <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button
                     onClick={() => {
                       const siguiente = !reagendando;
                       setReagendando(siguiente);
@@ -2930,7 +2935,6 @@ setFormEditar({
                     </div>
                   )}
                 </div>
-              </div>
             )}
           </div>
         ) : (
